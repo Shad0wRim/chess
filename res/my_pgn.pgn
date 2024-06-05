@@ -1,0 +1,18 @@
+[Event "Live Chess"]
+[Site "Chess.com"]
+[Date "2024.03.31"]
+[Round "?"]
+[White "Shadowrim"]
+[Black "tuitybooty"]
+[Result "1-0"]
+[ECO "C55"]
+[WhiteElo "583"]
+[BlackElo "651"]
+[TimeControl "300"]
+[EndTime "9:13:11 PDT"]
+[Termination "Shadowrim won by checkmate"]
+
+1. e4 e5 2. Nf3 Nc6 3. Bc4 Nf6 4. d3 d5 5. exd5 Nxd5 6. O-O Bg4 7. h3 Bf5 8. Re1
+Bd6 9. Bxd5 e4 10. Bxe4 Ne7 11. Bxb7 O-O 12. Bxa8 Qxa8 13. Bg5 c5 14. Bxe7 Bxe7
+15. Rxe7 c4 16. dxc4 Be4 17. Nbd2 Bc6 18. Qe2 Re8 19. Re1 Kf8 20. Nd4 Bxg2 21.
+Rxe8+ Qxe8 22. Qxe8# 1-0
