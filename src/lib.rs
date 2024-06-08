@@ -59,7 +59,16 @@ impl ChessGame {
         contents
     }
     pub fn reset(&mut self) {
-        *self = Self::default();
+        *self = Self {
+            board: ChessBoard::default(),
+            game_state: GameState::default(),
+            position_counter: Counter::default(),
+            game_hist: Vec::default(),
+            rotate_board: self.rotate_board,
+            allow_undo: self.allow_undo,
+            players: self.players.clone(),
+            enforce_flags: self.enforce_flags,
+        }
     }
     pub fn display_win_message(&self) {
         match self.game_state {
@@ -118,6 +127,7 @@ impl ChessGame {
         let history = self.game_hist.clone();
 
         self.game_hist = Vec::new();
+        self.position_counter = Counter::new();
         self.board = ChessBoard::default();
         for turn in history {
             self.make_move(&turn).unwrap();

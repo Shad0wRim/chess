@@ -29,7 +29,7 @@ fn main() {
     let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
 
     play_from_pgn(&mut game, _pgn_string);
-    // game.reset();
+    game.reset();
     play_game(&mut game);
 
     let pgn = game.gen_pgn();
