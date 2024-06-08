@@ -803,12 +803,6 @@ impl Display for ChessBoard {
             }
             output.push_str("\t  a b c d e f g h\n");
         }
-
-        if self.is_white {
-            output.push_str("White's turn\n");
-        } else {
-            output.push_str("Black's turn\n");
-        }
         write!(f, "{}", output)
     }
 }

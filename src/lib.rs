@@ -11,11 +11,12 @@ use std::error::Error;
 use std::fs;
 use std::io;
 
+#[derive(Debug)]
 pub struct ChessGame {
     board: ChessBoard,
     game_state: GameState,
     game_hist: Vec<Turn>,
-    rotate_board: bool,
+    rotate_board: RotateBoard,
     allow_undo: bool,
     players: (String, String),
     enforce_flags: bool,
@@ -26,7 +27,7 @@ impl ChessGame {
         ChessGameBuilder::default()
     }
     pub fn play_game(&mut self) {
-        self.display(true);
+        self.display();
         loop {
             let outcome: Result<(), Box<dyn Error>> = (|| {
                 let mut buf = String::new();
@@ -52,11 +53,7 @@ impl ChessGame {
                 continue;
             };
 
-            if self.rotate_board && !self.board.is_white() {
-                self.display(false);
-            } else {
-                self.display(true);
-            }
+            self.display();
 
             if self.game_state == GameState::Continue {
                 continue;
@@ -135,13 +132,13 @@ impl ChessGame {
                 .collect();
 
             (1..12).for_each(|_| println!());
-            self.display(true);
+            self.display();
 
             for r#move in moves {
                 io::stdin().read_line(&mut buf)?;
                 let full_turn = self.make_move(&r#move)?;
                 self.game_hist.push(full_turn);
-                self.display(true);
+                self.display();
             }
 
             let game_result = match extract_field("Result") {
@@ -214,7 +211,7 @@ impl ChessGame {
     pub fn reset(&mut self) {
         *self = Self::default();
     }
-    pub fn set_rotate_board(&mut self, rotate_board: bool) {
+    pub fn set_rotate_board(&mut self, rotate_board: RotateBoard) {
         self.rotate_board = rotate_board;
     }
     pub fn set_allow_undo(&mut self, allow_undo: bool) {
@@ -262,20 +259,26 @@ impl ChessGame {
         self.game_state = self.board.check_gamestate();
         Ok(full_turn)
     }
-    fn display(&self, is_white: bool) {
+    fn display(&self) {
         // const ED2: &str = "\x1b[2J";
         const ED0: &str = "\x1b[J";
         const CUP: &str = "\x1b[H";
-        let buf = if is_white {
-            format!("{}", self.board)
-        } else {
-            format!("{:#}", self.board)
+        let buf = match self.rotate_board {
+            RotateBoard::White => format!("{}", self.board),
+            RotateBoard::Black => format!("{:#}", self.board),
+            RotateBoard::Rotate if self.board.is_white() => format!("{}", self.board),
+            RotateBoard::Rotate => format!("{:#}", self.board),
         };
-
         // print!("{}", ED2);
         print!("{}", CUP);
         print!("{}", ED0);
         print!("{}", buf);
+        let curr_player = if self.board.is_white() {
+            &self.players.0
+        } else {
+            &self.players.1
+        };
+        println!("{}'s turn", curr_player);
     }
 }
 impl Default for ChessGame {
@@ -284,7 +287,7 @@ impl Default for ChessGame {
             board: ChessBoard::default(),
             game_state: GameState::default(),
             game_hist: Vec::default(),
-            rotate_board: false,
+            rotate_board: RotateBoard::White,
             allow_undo: false,
             players: ("White".to_string(), "Black".to_string()),
             enforce_flags: true,
@@ -301,7 +304,7 @@ fn print_all_errors<T: Error + ?Sized>(err: &T) {
 }
 
 pub struct ChessGameBuilder {
-    rotate_board: bool,
+    rotate_board: RotateBoard,
     allow_undo: bool,
     players: (String, String),
     enforce_flags: bool,
@@ -309,7 +312,7 @@ pub struct ChessGameBuilder {
 impl Default for ChessGameBuilder {
     fn default() -> Self {
         ChessGameBuilder {
-            rotate_board: false,
+            rotate_board: RotateBoard::White,
             allow_undo: false,
             players: (String::from("White"), String::from("Black")),
             enforce_flags: true,
@@ -320,7 +323,7 @@ impl ChessGameBuilder {
     pub fn new() -> Self {
         Self::default()
     }
-    pub fn rotate_board(&mut self, val: bool) -> &mut Self {
+    pub fn rotate_board(&mut self, val: RotateBoard) -> &mut Self {
         self.rotate_board = val;
         self
     }
@@ -345,4 +348,11 @@ impl ChessGameBuilder {
             ..ChessGame::default()
         }
     }
+}
+
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum RotateBoard {
+    White,
+    Black,
+    Rotate,
 }
