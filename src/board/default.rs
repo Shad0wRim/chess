@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 
 use super::square::Square;
-use super::{CastlingChecks, ChessBoard};
+use super::{CastlingRights, ChessBoard};
 use crate::pieces::{Piece, PieceType};
 
 impl Default for ChessBoard {
@@ -42,11 +42,12 @@ impl Default for ChessBoard {
         ];
         let board = HashMap::from(board_array);
         ChessBoard {
-            board,
+            piece_locs: board,
             is_white: true,
-            castling: CastlingChecks::default(),
+            castling: CastlingRights::default(),
             en_passant: None,
-            fifty_move: 50,
+            half_move_clock: 0,
+            full_move_number: 1,
         }
     }
 }

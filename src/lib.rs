@@ -1,20 +1,22 @@
 mod board;
+mod counter;
 mod parser;
 mod pieces;
 mod turn;
 
 use board::{ChessBoard, DrawType, GameState, TurnError, Win, WinType};
+use counter::Counter;
 use parser::parse_move;
 use turn::Turn;
 
 use std::error::Error;
-use std::fs;
 use std::io;
 
 #[derive(Debug)]
 pub struct ChessGame {
     board: ChessBoard,
     game_state: GameState,
+    position_counter: Counter<String>,
     game_hist: Vec<Turn>,
     rotate_board: RotateBoard,
     allow_undo: bool,
@@ -25,6 +27,9 @@ pub struct ChessGame {
 impl ChessGame {
     pub fn builder() -> ChessGameBuilder {
         ChessGameBuilder::default()
+    }
+    pub fn gen_fen(&self) -> String {
+        self.board.gen_fen()
     }
     pub fn play_game(&mut self) {
         self.display();
@@ -40,6 +45,8 @@ impl ChessGame {
                         self.make_move(&turn)?;
                     }
                     return Ok(());
+                } else if buf.trim().to_lowercase() == "q" {
+                    return Err("quit game".into());
                 }
 
                 let turn = parse_move(buf.trim())?;
@@ -63,12 +70,8 @@ impl ChessGame {
             }
         }
     }
-    pub fn play_from_pgn(&mut self, filename: &str) {
+    pub fn play_from_pgn(&mut self, file_string: String) {
         let mut buf = String::new();
-        let Ok(file_string) = fs::read_to_string(filename) else {
-            println!("Failed to open file `{}`", filename);
-            return;
-        };
         let scan_between = |open_delimiter: char, close_delimiter: char, keep: bool| {
             move |is_between: &mut bool, ch: char| {
                 if open_delimiter == close_delimiter && ch == open_delimiter {
@@ -181,9 +184,9 @@ impl ChessGame {
             }
         }
     }
-    pub fn create_pgn(&self, filename: &str) -> Result<(), io::Error> {
+    pub fn gen_pgn(&self) -> String {
         let mut contents = String::new();
-        let result = match self.board.check_gamestate() {
+        let result = match self.board.check_gamestate(&self.position_counter) {
             GameState::Continue => "*",
             GameState::Win(Win { is_white: true, .. }) => "1-0",
             GameState::Win(Win {
@@ -205,8 +208,7 @@ impl ChessGame {
             }
         }
         contents.push_str(result);
-
-        fs::write(filename, contents)
+        contents
     }
     pub fn reset(&mut self) {
         *self = Self::default();
@@ -255,8 +257,16 @@ impl ChessGame {
         } else {
             self.board.gen_flags(full_turn)
         };
+        let trimmed_fen = self
+            .board
+            .gen_fen()
+            .split_whitespace()
+            .take(4)
+            .collect::<Vec<_>>()
+            .join(" ");
+        self.position_counter.add(trimmed_fen);
         self.board.update_board(&full_turn);
-        self.game_state = self.board.check_gamestate();
+        self.game_state = self.board.check_gamestate(&self.position_counter);
         Ok(full_turn)
     }
     fn display(&self) {
@@ -286,6 +296,7 @@ impl Default for ChessGame {
         ChessGame {
             board: ChessBoard::default(),
             game_state: GameState::default(),
+            position_counter: Counter::new(),
             game_hist: Vec::default(),
             rotate_board: RotateBoard::White,
             allow_undo: false,

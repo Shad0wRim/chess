@@ -7,11 +7,12 @@ pub use source::Source;
 pub use square::Square;
 use std::collections::HashMap;
 use std::error::Error;
+use std::fmt::{self, Display};
 
+use crate::counter::Counter;
 use crate::parser::Flag;
 use crate::pieces::{Piece, PieceType};
 use crate::turn::{CastlingType, Move, Turn};
-use std::fmt::{self, Display};
 
 #[derive(Debug)]
 pub enum TurnError {
@@ -79,11 +80,12 @@ impl Display for TurnError {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct ChessBoard {
-    board: HashMap<Square, Piece>,
+    piece_locs: HashMap<Square, Piece>,
     is_white: bool,
-    castling: CastlingChecks,
+    castling: CastlingRights,
     en_passant: Option<Square>,
-    fifty_move: u8,
+    half_move_clock: u8,
+    full_move_number: u8,
 }
 
 impl ChessBoard {
@@ -238,13 +240,6 @@ impl ChessBoard {
                     self.en_passant = None;
                 }
 
-                // update fifty move rule
-                if r#move.piece == PieceType::Pawn || self.get(&r#move.dst).is_some() {
-                    self.fifty_move = 50;
-                } else {
-                    self.fifty_move -= 1;
-                }
-
                 // update the board
                 self.remove(&src);
                 self.insert(piece);
@@ -257,9 +252,20 @@ impl ChessBoard {
                 }
             }
         }
+        // update fifty move rule
+        if let Turn::Move(r#move) = turn {
+            if r#move.piece == PieceType::Pawn || self.get(&r#move.dst).is_some() {
+                self.half_move_clock = 0;
+            } else {
+                self.half_move_clock += 1;
+            }
+        }
+        if !self.is_white {
+            self.full_move_number += 1;
+        }
         self.is_white = !self.is_white;
     }
-    pub fn check_gamestate(&self) -> GameState {
+    pub fn check_gamestate(&self, position_hist: &Counter<String>) -> GameState {
         // self.is_white must be the player who plays next
 
         let mut moves: Vec<Turn> = Vec::new();
@@ -296,7 +302,11 @@ impl ChessBoard {
             return GameState::Draw(DrawType::InsufficientMaterial);
         }
 
-        if self.fifty_move == 0 {
+        if self.is_threefold_repitition(position_hist) {
+            return GameState::Draw(DrawType::ThreefoldRepitition);
+        }
+
+        if self.half_move_clock >= 100 {
             return GameState::Draw(DrawType::FiftyMove);
         }
 
@@ -361,6 +371,78 @@ impl ChessBoard {
             Turn::Castling(castling_type, _) => Turn::Castling(castling_type, flags),
             Turn::Move(r#move) => Turn::Move(Move { flags, ..r#move }),
         }
+    }
+    pub fn gen_fen(&self) -> String {
+        let mut fen = String::new();
+
+        for rank in ('1'..='8').rev().map(|c| Line::new(c).unwrap()) {
+            let mut line = String::new();
+            for loc in rank.to_vec() {
+                let piece_char = if let Some(pc) = self.get(&loc) {
+                    format!("{:#}", pc)
+                } else {
+                    String::from("1")
+                };
+                line.push_str(&piece_char);
+            }
+            let line = line.chars().fold(String::new(), |mut full_line, c| {
+                if c.is_numeric() {
+                    if let Some(last_char) = unsafe { full_line.as_bytes_mut().last_mut() } {
+                        if (*last_char as char).is_numeric() {
+                            *last_char += 1;
+                        } else {
+                            full_line.push(c);
+                        }
+                    } else {
+                        full_line.push(c);
+                    }
+                } else {
+                    full_line.push(c);
+                }
+                full_line
+            });
+
+            fen.push_str(&line);
+            fen.push('/');
+        }
+        fen.remove(fen.len() - 1);
+        fen.push(' ');
+
+        fen.push(if self.is_white { 'w' } else { 'b' });
+        fen.push(' ');
+
+        let mut castling = String::new();
+        if self.castling.white_king && self.castling.white_rh1 {
+            castling.push('K');
+        }
+        if self.castling.white_king && self.castling.white_ra1 {
+            castling.push('Q');
+        }
+        if self.castling.black_king && self.castling.black_rh8 {
+            castling.push('k');
+        }
+        if self.castling.black_king && self.castling.black_ra8 {
+            castling.push('q');
+        }
+        if castling.is_empty() {
+            castling.push('-');
+        }
+        fen.push_str(&castling);
+        fen.push(' ');
+
+        if let Some(en_passant) = self.en_passant {
+            fen.push_str(&en_passant.to_string());
+        } else {
+            fen.push('-');
+        }
+        fen.push(' ');
+
+        fen.push_str(&self.half_move_clock.to_string());
+        fen.push(' ');
+
+        fen.push_str(&self.full_move_number.to_string());
+
+        fen
     }
     fn validate_move(&self, r#move: &Move) -> Result<Source, TurnError> {
         let mut potential_moves: Vec<(Square, Vec<Square>)> = Vec::new();
@@ -520,7 +602,7 @@ impl ChessBoard {
         }
     }
     fn find_pieces(&self, piece: Piece) -> impl Iterator<Item = (&Square, &Piece)> {
-        self.board
+        self.piece_locs
             .iter()
             .filter(move |&(_, pc)| pc.piece == piece.piece && pc.is_white == piece.is_white)
     }
@@ -537,13 +619,13 @@ impl ChessBoard {
         }
     }
     fn get(&self, sq: &Square) -> Option<&Piece> {
-        self.board.get(sq)
+        self.piece_locs.get(sq)
     }
     fn insert(&mut self, piece: (Square, Piece)) {
-        self.board.insert(piece.0, piece.1);
+        self.piece_locs.insert(piece.0, piece.1);
     }
     fn remove(&mut self, sq: &Square) {
-        self.board.remove(sq);
+        self.piece_locs.remove(sq);
     }
     fn gen_moves(&self, full_piece: (&Square, &Piece)) -> Vec<Square> {
         let (loc, piece) = full_piece;
@@ -561,45 +643,41 @@ impl ChessBoard {
                     || self.en_passant.is_some_and(|a| a == *sq)
             })
         }
-        match piece.piece {
-            PieceType::Pawn if piece.is_white => {
-                let uu = |sq: &Square| sq.up()?.up();
-                if let Some(next_sq) = loc.up() {
-                    if self.get(&next_sq).is_none() {
-                        moves.push(next_sq);
-                    }
-                }
-                if let Some(next_sq) = uu(loc) {
-                    if loc.rank() == Line::Rank2
-                        && self.get(&next_sq).is_none()
-                        && self
-                            .get(&loc.up().expect("is some from prev check"))
-                            .is_none()
-                    {
-                        moves.push(next_sq);
-                    }
+        if piece.piece == PieceType::Pawn && piece.is_white {
+            let uu = |sq: &Square| sq.up()?.up();
+            if let Some(next_sq) = loc.up() {
+                if self.get(&next_sq).is_none() {
+                    moves.push(next_sq);
                 }
             }
-            PieceType::Pawn if !piece.is_white => {
-                let dd = |sq: &Square| sq.down()?.down();
-                if let Some(next_sq) = loc.down() {
-                    if self.get(&next_sq).is_none() {
-                        moves.push(next_sq);
-                    }
-                }
-                if let Some(next_sq) = dd(loc) {
-                    if loc.rank() == Line::Rank7
-                        && self.get(&next_sq).is_none()
-                        && self
-                            .get(&loc.down().expect("is some from prev check"))
-                            .is_none()
-                    {
-                        moves.push(next_sq);
-                    }
+            if let Some(next_sq) = uu(loc) {
+                if loc.rank() == Line::Rank2
+                    && self.get(&next_sq).is_none()
+                    && self
+                        .get(&loc.up().expect("is some from prev check"))
+                        .is_none()
+                {
+                    moves.push(next_sq);
                 }
             }
-            _ => (),
-        };
+        } else if piece.piece == PieceType::Pawn && !piece.is_white {
+            let dd = |sq: &Square| sq.down()?.down();
+            if let Some(next_sq) = loc.down() {
+                if self.get(&next_sq).is_none() {
+                    moves.push(next_sq);
+                }
+            }
+            if let Some(next_sq) = dd(loc) {
+                if loc.rank() == Line::Rank7
+                    && self.get(&next_sq).is_none()
+                    && self
+                        .get(&loc.down().expect("is some from prev check"))
+                        .is_none()
+                {
+                    moves.push(next_sq);
+                }
+            }
+        }
         moves
     }
     fn gen_targets(&self, full_piece: (&Square, &Piece)) -> Vec<Square> {
@@ -726,10 +804,13 @@ impl ChessBoard {
     fn causes_checkmate(&self, turn: &Turn) -> bool {
         let mut test_board = self.clone();
         test_board.update_board(turn);
-        matches!(test_board.check_gamestate(), GameState::Win(_))
+        matches!(
+            test_board.check_gamestate(&Counter::new()),
+            GameState::Win(_)
+        )
     }
     fn get_player_pieces(&self, is_white: bool) -> impl Iterator<Item = (&Square, &Piece)> {
-        self.board
+        self.piece_locs
             .iter()
             .filter(move |(_, pc)| pc.is_white == is_white)
     }
@@ -764,6 +845,9 @@ impl ChessBoard {
                                 black_loc.is_light() == white_loc.is_light()
                             })
                     })
+    }
+    fn is_threefold_repitition(&self, position_hist: &Counter<String>) -> bool {
+        position_hist.counts().any(|&count| count >= 3)
     }
 }
 
@@ -839,7 +923,7 @@ pub enum DrawType {
 }
 
 #[derive(PartialEq, Clone, Copy, Debug)]
-struct CastlingChecks {
+struct CastlingRights {
     white_king: bool,
     white_ra1: bool,
     white_rh1: bool,
@@ -847,9 +931,9 @@ struct CastlingChecks {
     black_ra8: bool,
     black_rh8: bool,
 }
-impl Default for CastlingChecks {
+impl Default for CastlingRights {
     fn default() -> Self {
-        CastlingChecks {
+        CastlingRights {
             white_king: true,
             white_ra1: true,
             white_rh1: true,
