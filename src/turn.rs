@@ -18,12 +18,12 @@ pub enum Turn {
     Move(Move),
 }
 impl Turn {
-    pub fn new(full_piece: (Square, Piece), dst: Square) -> Turn {
+    pub fn new((loc, piece): (Square, Piece), dst: Square) -> Turn {
         Turn::Move(Move {
-            piece: full_piece.1.piece,
+            piece: piece.piece,
             dst,
             flags: 0,
-            src: Some(Source::Square(full_piece.0)),
+            src: Some(Source::Square(loc)),
             promotion: None,
         })
     }

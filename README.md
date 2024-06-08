@@ -1,15 +1,16 @@
 # Terminal Chess Application
 
 This project is a terminal chess application written in Rust. It allows for playing online on a server running the server application, as well as local play on the same machine.
-It also allows for playback of pgn files and creation of pgn files from the played games.
+
+It also allows for playback of pgn files and creation of pgn files from the played games, as well as fen state format
 
 
 # Installation
 Currently unavailable, but once finished ->
-download client from releases, which allows for both online and local play.
+use cargo install *name* to download the client, which can play on its own and connect to the server if it is running
 
 # Usage
-Run the program from the directory it is contained in using the command:
+Run the program using the command:
 ```
 ./terminal_chess
 ```
@@ -24,6 +25,9 @@ Perspective (local only) - shows the board in the perspective specified, White's
 
 # TODO
 Add server and clients to allow separate people to 
+
 add terminal gui elements that let you select pieces and options with arrow keys
+
 visualize legal moves
+
 customizable board

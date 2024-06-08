@@ -17,7 +17,6 @@ impl Piece {
 
 impl fmt::Display for Piece {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        '\u{2654}'..='\u{265F}';
         let chess_sym = if !f.alternate() {
             match self {
                 Self {
@@ -81,16 +80,14 @@ impl fmt::Display for Piece {
                     ..
                 } => '\u{265F}',
             }
+        } else if self.is_white {
+            self.piece.to_string().chars().next().unwrap()
         } else {
-            if self.is_white {
-                self.piece.to_string().chars().next().unwrap()
-            } else {
-                self.piece
-                    .to_string()
-                    .chars()
-                    .find_map(|c| c.to_lowercase().next())
-                    .unwrap()
-            }
+            self.piece
+                .to_string()
+                .chars()
+                .find_map(|c| c.to_lowercase().next())
+                .unwrap()
         };
         write!(f, "{}", chess_sym)
     }

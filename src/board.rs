@@ -85,7 +85,7 @@ pub struct ChessBoard {
     castling: CastlingRights,
     en_passant: Option<Square>,
     half_move_clock: u8,
-    full_move_number: u8,
+    full_move_number: u16,
 }
 
 impl ChessBoard {
@@ -108,84 +108,82 @@ impl ChessBoard {
                 let new_rook;
                 let old_king_loc: Square;
                 let old_rook_loc: Square;
-                match castling_type {
-                    CastlingType::Long => {
-                        if self.is_white {
-                            new_king = (
-                                Square::C1,
-                                Piece {
-                                    piece: PieceType::King,
-                                    is_white: true,
-                                },
-                            );
-                            new_rook = (
-                                Square::D1,
-                                Piece {
-                                    piece: PieceType::Rook,
-                                    is_white: true,
-                                },
-                            );
-                            old_king_loc = Square::E1;
-                            old_rook_loc = Square::A1;
-                            self.castling.white_king = false;
-                        } else {
-                            new_king = (
-                                Square::C8,
-                                Piece {
-                                    piece: PieceType::King,
-                                    is_white: false,
-                                },
-                            );
-                            new_rook = (
-                                Square::D8,
-                                Piece {
-                                    piece: PieceType::Rook,
-                                    is_white: false,
-                                },
-                            );
-                            old_king_loc = Square::E8;
-                            old_rook_loc = Square::A8;
-                            self.castling.black_king = false;
-                        }
+                match (castling_type, self.is_white) {
+                    (CastlingType::Long, true) => {
+                        new_king = (
+                            Square::C1,
+                            Piece {
+                                piece: PieceType::King,
+                                is_white: true,
+                            },
+                        );
+                        new_rook = (
+                            Square::D1,
+                            Piece {
+                                piece: PieceType::Rook,
+                                is_white: true,
+                            },
+                        );
+                        old_king_loc = Square::E1;
+                        old_rook_loc = Square::A1;
+                        self.castling.white_king = false;
                     }
-                    CastlingType::Short => {
-                        if self.is_white {
-                            new_king = (
-                                Square::G1,
-                                Piece {
-                                    piece: PieceType::King,
-                                    is_white: true,
-                                },
-                            );
-                            new_rook = (
-                                Square::F1,
-                                Piece {
-                                    piece: PieceType::Rook,
-                                    is_white: true,
-                                },
-                            );
-                            old_king_loc = Square::E1;
-                            old_rook_loc = Square::H1;
-                            self.castling.white_king = false;
-                        } else {
-                            new_king = (
-                                Square::G8,
-                                Piece {
-                                    piece: PieceType::King,
-                                    is_white: false,
-                                },
-                            );
-                            new_rook = (
-                                Square::F8,
-                                Piece {
-                                    piece: PieceType::Rook,
-                                    is_white: false,
-                                },
-                            );
-                            old_king_loc = Square::E8;
-                            old_rook_loc = Square::H8;
-                            self.castling.black_king = false;
-                        }
+                    (CastlingType::Long, false) => {
+                        new_king = (
+                            Square::C8,
+                            Piece {
+                                piece: PieceType::King,
+                                is_white: false,
+                            },
+                        );
+                        new_rook = (
+                            Square::D8,
+                            Piece {
+                                piece: PieceType::Rook,
+                                is_white: false,
+                            },
+                        );
+                        old_king_loc = Square::E8;
+                        old_rook_loc = Square::A8;
+                        self.castling.black_king = false;
+                    }
+                    (CastlingType::Short, true) => {
+                        new_king = (
+                            Square::G1,
+                            Piece {
+                                piece: PieceType::King,
+                                is_white: true,
+                            },
+                        );
+                        new_rook = (
+                            Square::F1,
+                            Piece {
+                                piece: PieceType::Rook,
+                                is_white: true,
+                            },
+                        );
+                        old_king_loc = Square::E1;
+                        old_rook_loc = Square::H1;
+                        self.castling.white_king = false;
+                    }
+                    (CastlingType::Short, false) => {
+                        new_king = (
+                            Square::G8,
+                            Piece {
+                                piece: PieceType::King,
+                                is_white: false,
+                            },
+                        );
+                        new_rook = (
+                            Square::F8,
+                            Piece {
+                                piece: PieceType::Rook,
+                                is_white: false,
+                            },
+                        );
+                        old_king_loc = Square::E8;
+                        old_rook_loc = Square::H8;
+                        self.castling.black_king = false;
                     }
                 }
                 self.remove(&old_king_loc);
@@ -386,18 +384,11 @@ impl ChessBoard {
                 line.push_str(&piece_char);
             }
             let line = line.chars().fold(String::new(), |mut full_line, c| {
-                if c.is_numeric() {
-                    if let Some(last_char) = unsafe { full_line.as_bytes_mut().last_mut() } {
-                        if (*last_char as char).is_numeric() {
-                            *last_char += 1;
-                        } else {
-                            full_line.push(c);
-                        }
-                    } else {
-                        full_line.push(c);
-                    }
-                } else {
-                    full_line.push(c);
+                match (c.is_numeric(), unsafe {
+                    full_line.as_bytes_mut().last_mut()
+                }) {
+                    (true, Some(last_char)) if (*last_char as char).is_numeric() => *last_char += 1,
+                    _ => full_line.push(c),
                 }
                 full_line
             });

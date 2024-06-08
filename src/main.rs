@@ -6,7 +6,7 @@
 // TODO refactor once it works
 //
 use chess::*;
-use std::{fs, io};
+use std::fs;
 
 fn main() {
     // let mut buf = String::new();
@@ -26,11 +26,12 @@ fn main() {
         .players(("White".to_owned(), "Black".to_owned()))
         .enforce_flags(true)
         .build();
-    let pgn = fs::read_to_string("res/pgn.pgn").expect("Valid file");
-    game.play_from_pgn(pgn);
-    // game.play_game();
+    let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
+
+    play_from_pgn(&mut game, _pgn_string);
+    // game.reset();
+    play_game(&mut game);
+
     let pgn = game.gen_pgn();
     println!("{}", pgn);
-    // game.play_from_pgn("my_pgn.pgn");
-    // game.play_game();
 }

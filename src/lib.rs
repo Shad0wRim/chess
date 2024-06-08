@@ -4,13 +4,14 @@ mod parser;
 mod pieces;
 mod turn;
 
-use board::{ChessBoard, DrawType, GameState, TurnError, Win, WinType};
+pub use board::{ChessBoard, DrawType, GameState, TurnError, Win, WinType};
+pub use parser::parse_move;
+pub use turn::Turn;
+
 use counter::Counter;
-use parser::parse_move;
-use turn::Turn;
+use std::io;
 
 use std::error::Error;
-use std::io;
 
 #[derive(Debug)]
 pub struct ChessGame {
@@ -18,10 +19,10 @@ pub struct ChessGame {
     game_state: GameState,
     position_counter: Counter<String>,
     game_hist: Vec<Turn>,
-    rotate_board: RotateBoard,
-    allow_undo: bool,
-    players: (String, String),
-    enforce_flags: bool,
+    pub rotate_board: RotateBoard,
+    pub allow_undo: bool,
+    pub players: (String, String),
+    pub enforce_flags: bool,
 }
 
 impl ChessGame {
@@ -30,159 +31,6 @@ impl ChessGame {
     }
     pub fn gen_fen(&self) -> String {
         self.board.gen_fen()
-    }
-    pub fn play_game(&mut self) {
-        self.display();
-        loop {
-            let outcome: Result<(), Box<dyn Error>> = (|| {
-                let mut buf = String::new();
-                io::stdin().read_line(&mut buf)?;
-
-                if self.allow_undo && buf.trim().to_lowercase() == "u" {
-                    self.game_hist.pop();
-                    self.board = ChessBoard::default();
-                    for turn in self.game_hist.clone() {
-                        self.make_move(&turn)?;
-                    }
-                    return Ok(());
-                } else if buf.trim().to_lowercase() == "q" {
-                    return Err("quit game".into());
-                }
-
-                let turn = parse_move(buf.trim())?;
-                let full_turn = self.make_move(&turn)?;
-
-                self.game_hist.push(full_turn);
-                Ok(())
-            })();
-            if let Err(e) = outcome {
-                print_all_errors(e.as_ref());
-                continue;
-            };
-
-            self.display();
-
-            if self.game_state == GameState::Continue {
-                continue;
-            } else {
-                self.display_win_message();
-                return;
-            }
-        }
-    }
-    pub fn play_from_pgn(&mut self, file_string: String) {
-        let mut buf = String::new();
-        let scan_between = |open_delimiter: char, close_delimiter: char, keep: bool| {
-            move |is_between: &mut bool, ch: char| {
-                if open_delimiter == close_delimiter && ch == open_delimiter {
-                    *is_between = !*is_between;
-                    Some('�')
-                } else if ch == open_delimiter {
-                    *is_between = true;
-                    Some('�')
-                } else if ch == close_delimiter {
-                    *is_between = false;
-                    Some('�')
-                } else if *is_between {
-                    if keep {
-                        Some(ch)
-                    } else {
-                        Some('�')
-                    }
-                } else if keep {
-                    Some('�')
-                } else {
-                    Some(ch)
-                }
-            }
-        };
-        let extract_field = |field: &str| {
-            Some(
-                file_string
-                    .split_terminator('\n')
-                    .find(|line| line.contains(field))?
-                    .chars()
-                    .scan(false, scan_between('"', '"', true))
-                    .filter(|&ch| ch != '�')
-                    .collect::<String>(),
-            )
-        };
-        if let Some(white_name) = extract_field("White") {
-            self.players.0 = white_name;
-        }
-        if let Some(black_name) = extract_field("Black") {
-            self.players.1 = black_name;
-        }
-
-        let pgn_read_result = (|| -> Result<GameState, Box<dyn Error>> {
-            let moves: Vec<_> = file_string
-                .split_terminator('\n')
-                .skip_while(|line| line.starts_with('[') || line.is_empty())
-                .collect::<Vec<_>>()
-                .join(" ")
-                .chars()
-                .scan(false, scan_between('{', '}', false))
-                .filter(|&ch| ch != '�')
-                .collect::<String>()
-                .split_whitespace()
-                .map(|substr| {
-                    substr
-                        .split('.')
-                        .last()
-                        .expect("split always produces an iterator")
-                })
-                .filter_map(|turn| turn.parse::<Turn>().ok())
-                .collect();
-
-            (1..12).for_each(|_| println!());
-            self.display();
-
-            for r#move in moves {
-                io::stdin().read_line(&mut buf)?;
-                let full_turn = self.make_move(&r#move)?;
-                self.game_hist.push(full_turn);
-                self.display();
-            }
-
-            let game_result = match extract_field("Result") {
-                Some(result) => result,
-                None => file_string
-                    .split_whitespace()
-                    .last()
-                    .ok_or("Empty file")?
-                    .to_string(),
-            };
-
-            match game_result.as_str() {
-                "1/2-1/2" => Ok(GameState::Draw(DrawType::Offer)),
-                "1-0" => Ok(GameState::Win(board::Win {
-                    is_white: true,
-                    kind: WinType::Resign,
-                })),
-                "0-1" => Ok(GameState::Win(board::Win {
-                    is_white: false,
-                    kind: WinType::Resign,
-                })),
-                "*" => Ok(GameState::Continue),
-                _ => Err("Did not find a result for the game".into()),
-            }
-        })();
-
-        match pgn_read_result {
-            Ok(game_result) => match self.game_state {
-                GameState::Continue => match game_result {
-                    GameState::Continue => self.play_game(),
-                    _ => {
-                        self.game_state = game_result;
-                        self.display_win_message();
-                    }
-                },
-                _ => self.display_win_message(),
-            },
-            Err(e) => {
-                print_all_errors(e.as_ref());
-            }
-        }
     }
     pub fn gen_pgn(&self) -> String {
         let mut contents = String::new();
@@ -213,13 +61,7 @@ impl ChessGame {
     pub fn reset(&mut self) {
         *self = Self::default();
     }
-    pub fn set_rotate_board(&mut self, rotate_board: RotateBoard) {
-        self.rotate_board = rotate_board;
-    }
-    pub fn set_allow_undo(&mut self, allow_undo: bool) {
-        self.allow_undo = allow_undo;
-    }
-    fn display_win_message(&self) {
+    pub fn display_win_message(&self) {
         match self.game_state {
             GameState::Win(win) => {
                 match win.is_white {
@@ -244,7 +86,7 @@ impl ChessGame {
             GameState::Continue => (),
         };
     }
-    fn make_move(&mut self, turn: &Turn) -> Result<Turn, TurnError> {
+    pub fn make_move(&mut self, turn: &Turn) -> Result<(), TurnError> {
         let full_turn = self.board.validate_and_complete_turn(*turn)?;
         if let Turn::Move(r#move) = full_turn {
             let Some(board::Source::Square(_)) = r#move.src else {
@@ -266,10 +108,22 @@ impl ChessGame {
             .join(" ");
         self.position_counter.add(trimmed_fen);
         self.board.update_board(&full_turn);
+        self.game_hist.push(full_turn);
+
         self.game_state = self.board.check_gamestate(&self.position_counter);
-        Ok(full_turn)
+        Ok(())
     }
-    fn display(&self) {
+    pub fn undo_move(&mut self) {
+        self.game_hist.pop();
+        let history = self.game_hist.clone();
+
+        self.game_hist = Vec::new();
+        self.board = ChessBoard::default();
+        for turn in history {
+            self.make_move(&turn).unwrap();
+        }
+    }
+    pub fn display(&self) {
         // const ED2: &str = "\x1b[2J";
         const ED0: &str = "\x1b[J";
         const CUP: &str = "\x1b[H";
@@ -291,6 +145,25 @@ impl ChessGame {
         println!("{}'s turn", curr_player);
     }
 }
+
+impl ChessGame {
+    pub fn board(&self) -> &ChessBoard {
+        &self.board
+    }
+    pub fn game_state(&self) -> &GameState {
+        &self.game_state
+    }
+    pub fn game_state_mut(&mut self) -> &mut GameState {
+        &mut self.game_state
+    }
+}
+#[derive(PartialEq, Debug, Clone, Copy)]
+pub enum RotateBoard {
+    White,
+    Black,
+    Rotate,
+}
+
 impl Default for ChessGame {
     fn default() -> Self {
         ChessGame {
@@ -305,12 +178,173 @@ impl Default for ChessGame {
         }
     }
 }
-fn print_all_errors<T: Error + ?Sized>(err: &T) {
+pub fn print_all_errors<T: Error + ?Sized>(err: &T) {
     println!("{}", err);
     let mut next = err.source();
     while let Some(e) = next {
         println!("{}", e);
         next = e.source();
+    }
+}
+
+pub fn play_game(game: &mut ChessGame) {
+    game.display();
+    if *game.game_state() != GameState::Continue {
+        game.display_win_message();
+        return;
+    }
+
+    loop {
+        let outcome: Result<bool, Box<dyn Error>> = (|| {
+            let mut buf = String::new();
+            io::stdin().read_line(&mut buf)?;
+
+            if game.allow_undo && buf.trim().to_lowercase() == "u" {
+                game.undo_move();
+                return Ok(false);
+            } else if !game.allow_undo && buf.trim().to_lowercase() == "u" {
+                return Err("Undoing moves is not allowed".into());
+            } else if buf.trim().to_lowercase() == "q" {
+                return Ok(true);
+            }
+
+            let turn = parse_move(buf.trim())?;
+            let _full_turn = game.make_move(&turn)?;
+            Ok(false)
+        })();
+        match outcome {
+            Ok(quit) if quit => {
+                println!("Quitting game");
+                return;
+            }
+            Err(e) => {
+                print_all_errors(e.as_ref());
+                continue;
+            }
+            _ => (),
+        }
+
+        game.display();
+
+        if *game.game_state() == GameState::Continue {
+            continue;
+        } else {
+            game.display_win_message();
+            return;
+        }
+    }
+}
+
+pub fn play_from_pgn(game: &mut ChessGame, file_string: String) {
+    let mut buf = String::new();
+    let scan_between = |open_delimiter: char, close_delimiter: char, keep: bool| {
+        move |is_between: &mut bool, ch: char| {
+            if open_delimiter == close_delimiter && ch == open_delimiter {
+                *is_between = !*is_between;
+                Some('�')
+            } else if ch == open_delimiter {
+                *is_between = true;
+                Some('�')
+            } else if ch == close_delimiter {
+                *is_between = false;
+                Some('�')
+            } else if *is_between {
+                if keep {
+                    Some(ch)
+                } else {
+                    Some('�')
+                }
+            } else if keep {
+                Some('�')
+            } else {
+                Some(ch)
+            }
+        }
+    };
+    let extract_field = |field: &str| {
+        Some(
+            file_string
+                .split_terminator('\n')
+                .find(|line| line.contains(field))?
+                .chars()
+                .scan(false, scan_between('"', '"', true))
+                .filter(|&ch| ch != '�')
+                .collect::<String>(),
+        )
+    };
+    if let Some(white_name) = extract_field("White") {
+        game.players.0 = white_name;
+    }
+    if let Some(black_name) = extract_field("Black") {
+        game.players.1 = black_name;
+    }
+
+    let moves: Vec<_> = file_string
+        .split_terminator('\n')
+        .skip_while(|line| line.starts_with('[') || line.is_empty())
+        .collect::<Vec<_>>()
+        .join(" ")
+        .chars()
+        .scan(false, scan_between('{', '}', false))
+        .filter(|&ch| ch != '�')
+        .collect::<String>()
+        .split_whitespace()
+        .map(|substr| {
+            substr
+                .split('.')
+                .last()
+                .expect("split always produces an iterator")
+        })
+        .filter_map(|turn| turn.parse::<Turn>().ok())
+        .collect();
+
+    game.display();
+
+    let pgn_read_result = (|| -> Result<GameState, Box<dyn Error>> {
+        for r#move in moves {
+            io::stdin().read_line(&mut buf)?;
+            game.make_move(&r#move)?;
+            game.display();
+        }
+
+        let game_result = match extract_field("Result") {
+            Some(result) => result,
+            None => file_string
+                .split_whitespace()
+                .last()
+                .ok_or("Empty file")?
+                .to_string(),
+        };
+
+        match game_result.as_str() {
+            "1/2-1/2" => Ok(GameState::Draw(DrawType::Offer)),
+            "1-0" => Ok(GameState::Win(Win {
+                is_white: true,
+                kind: WinType::Resign,
+            })),
+            "0-1" => Ok(GameState::Win(Win {
+                is_white: false,
+                kind: WinType::Resign,
+            })),
+            "*" => Ok(GameState::Continue),
+            _ => Err("Did not find a result for the game".into()),
+        }
+    })();
+
+    match pgn_read_result {
+        Ok(game_result) => match game.game_state() {
+            GameState::Continue => match game_result {
+                GameState::Continue => play_game(game),
+                _ => {
+                    *game.game_state_mut() = game_result;
+                    game.display_win_message();
+                }
+            },
+            _ => game.display_win_message(),
+        },
+        Err(e) => {
+            print_all_errors(e.as_ref());
+        }
     }
 }
 
@@ -359,11 +393,4 @@ impl ChessGameBuilder {
             ..ChessGame::default()
         }
     }
-}
-
-#[derive(PartialEq, Debug, Clone, Copy)]
-pub enum RotateBoard {
-    White,
-    Black,
-    Rotate,
 }
