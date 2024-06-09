@@ -92,17 +92,3 @@ impl fmt::Display for Piece {
         write!(f, "{}", chess_sym)
     }
 }
-
-impl fmt::Display for PieceType {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let piece_letter = match self {
-            Self::King => 'K',
-            Self::Queen => 'Q',
-            Self::Rook => 'R',
-            Self::Bishop => 'B',
-            Self::Knight => 'N',
-            Self::Pawn => 'P',
-        };
-        write!(f, "{}", piece_letter)
-    }
-}

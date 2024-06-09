@@ -5,9 +5,11 @@ mod square;
 pub use line::Line;
 pub use source::Source;
 pub use square::Square;
+
 use std::collections::HashMap;
 use std::error::Error;
 use std::fmt::{self, Display};
+use std::str::FromStr;
 
 use crate::counter::Counter;
 use crate::parser::Flag;
@@ -25,8 +27,7 @@ pub enum TurnError {
     MissingInLine,
     BothInLine,
     KingInCheck,
-    CastleKingMoved,
-    CastleRookMoved,
+    CastleLostRights,
     CastlePathBlocked,
     CastleThroughCheck,
     NeedCheckSpecifier,
@@ -56,8 +57,7 @@ impl Display for TurnError {
             ),
             TurnError::BothInLine => write!(f, "Both potential pieces found in the line specified"),
             TurnError::KingInCheck => write!(f, "That move causes the king to be in check"),
-            TurnError::CastleKingMoved => write!(f, "Can't castle because the king moved"),
-            TurnError::CastleRookMoved => write!(f, "Can't castle because the rook moved"),
+            TurnError::CastleLostRights => write!(f, "Lost the right to castle"),
             TurnError::CastlePathBlocked => write!(f, "Can't castle becuase the path is blocked"),
             TurnError::CastleThroughCheck => {
                 write!(f, "Can't castle because the king would move through check")
@@ -126,7 +126,8 @@ impl ChessBoard {
                         );
                         old_king_loc = Square::E1;
                         old_rook_loc = Square::A1;
-                        self.castling.white_king = false;
+                        self.castling.white_kingside = false;
+                        self.castling.white_queenside = false;
                     }
                     (CastlingType::Long, false) => {
                         new_king = (
@@ -145,7 +146,8 @@ impl ChessBoard {
                         );
                         old_king_loc = Square::E8;
                         old_rook_loc = Square::A8;
-                        self.castling.black_king = false;
+                        self.castling.black_kingside = false;
+                        self.castling.black_queenside = false;
                     }
                     (CastlingType::Short, true) => {
                         new_king = (
@@ -164,7 +166,8 @@ impl ChessBoard {
                         );
                         old_king_loc = Square::E1;
                         old_rook_loc = Square::H1;
-                        self.castling.white_king = false;
+                        self.castling.white_kingside = false;
+                        self.castling.white_queenside = false;
                     }
                     (CastlingType::Short, false) => {
                         new_king = (
@@ -183,7 +186,8 @@ impl ChessBoard {
                         );
                         old_king_loc = Square::E8;
                         old_rook_loc = Square::H8;
-                        self.castling.black_king = false;
+                        self.castling.black_kingside = false;
+                        self.castling.black_queenside = false;
                     }
                 }
                 self.remove(&old_king_loc);
@@ -196,19 +200,25 @@ impl ChessBoard {
                     panic!("No specified source");
                 };
                 match src {
-                    Square::A1 => self.castling.white_ra1 = false,
-                    Square::E1 => self.castling.white_king = false,
-                    Square::H1 => self.castling.white_rh1 = false,
-                    Square::A8 => self.castling.black_ra8 = false,
-                    Square::E8 => self.castling.black_king = false,
-                    Square::H8 => self.castling.black_rh8 = false,
+                    Square::A1 => self.castling.white_queenside = false,
+                    Square::E1 => {
+                        self.castling.white_kingside = false;
+                        self.castling.white_queenside = false;
+                    }
+                    Square::H1 => self.castling.white_kingside = false,
+                    Square::A8 => self.castling.black_queenside = false,
+                    Square::E8 => {
+                        self.castling.black_kingside = false;
+                        self.castling.black_queenside = false;
+                    }
+                    Square::H8 => self.castling.black_kingside = false,
                     _ => (),
                 };
                 match r#move.dst {
-                    Square::A1 => self.castling.white_ra1 = false,
-                    Square::H1 => self.castling.white_rh1 = false,
-                    Square::A8 => self.castling.black_ra8 = false,
-                    Square::H8 => self.castling.black_rh8 = false,
+                    Square::A1 => self.castling.white_queenside = false,
+                    Square::H1 => self.castling.white_kingside = false,
+                    Square::A8 => self.castling.black_queenside = false,
+                    Square::H8 => self.castling.black_kingside = false,
                     _ => (),
                 };
                 let piece = (
@@ -374,24 +384,45 @@ impl ChessBoard {
         let mut fen = String::new();
 
         for rank in ('1'..='8').rev().map(|c| Line::new(c).unwrap()) {
-            let mut line = String::new();
+            // let mut line = String::new();
+            // for loc in rank.to_vec() {
+            //     let piece_char = if let Some(pc) = self.get(&loc) {
+            //         format!("{:#}", pc)
+            //     } else {
+            //         String::from("1")
+            //     };
+            //     line.push_str(&piece_char);
+            // }
+            // let line = line.chars().fold(String::new(), |mut full_line, c| {
+            //     match (c.is_numeric(), unsafe {
+            //         full_line.as_bytes_mut().last_mut()
+            //     }) {
+            //         (true, Some(last_char)) if (*last_char as char).is_numeric() => *last_char += 1,
+            //         _ => full_line.push(c),
+            //     }
+            //     full_line
+            // });
+            //
+            let mut line: Vec<u8> = Vec::new();
             for loc in rank.to_vec() {
                 let piece_char = if let Some(pc) = self.get(&loc) {
-                    format!("{:#}", pc)
+                    format!("{:#}", pc).into_bytes().into_iter().nth(0).unwrap()
                 } else {
-                    String::from("1")
+                    b'1'
                 };
-                line.push_str(&piece_char);
+                line.push(piece_char);
             }
-            let line = line.chars().fold(String::new(), |mut full_line, c| {
-                match (c.is_numeric(), unsafe {
-                    full_line.as_bytes_mut().last_mut()
-                }) {
-                    (true, Some(last_char)) if (*last_char as char).is_numeric() => *last_char += 1,
-                    _ => full_line.push(c),
-                }
-                full_line
-            });
+            let line = String::from_utf8(line.into_iter().fold(
+                Vec::new(),
+                |mut full_line: Vec<u8>, c| {
+                    match (c.is_ascii_digit(), full_line.last_mut()) {
+                        (true, Some(last_char)) if (last_char.is_ascii_digit()) => *last_char += 1,
+                        _ => full_line.push(c),
+                    }
+                    full_line
+                },
+            ))
+            .expect("is always ascii");
 
             fen.push_str(&line);
             fen.push('/');
@@ -403,16 +434,16 @@ impl ChessBoard {
         fen.push(' ');
 
         let mut castling = String::new();
-        if self.castling.white_king && self.castling.white_rh1 {
+        if self.castling.white_kingside {
             castling.push('K');
         }
-        if self.castling.white_king && self.castling.white_ra1 {
+        if self.castling.white_queenside {
             castling.push('Q');
         }
-        if self.castling.black_king && self.castling.black_rh8 {
+        if self.castling.black_kingside {
             castling.push('k');
         }
-        if self.castling.black_king && self.castling.black_ra8 {
+        if self.castling.black_queenside {
             castling.push('q');
         }
         if castling.is_empty() {
@@ -524,16 +555,11 @@ impl ChessBoard {
             (false, true) => vec![Square::D1, Square::C1, Square::B1],
             (false, false) => vec![Square::D8, Square::C8, Square::B8],
         };
-        let matching_rook = match (is_short, self.is_white) {
-            (true, true) => self.castling.white_rh1,
-            (true, false) => self.castling.black_rh8,
-            (false, true) => self.castling.white_ra1,
-            (false, false) => self.castling.black_ra8,
-        };
-        let matching_king = if self.is_white {
-            self.castling.white_king
-        } else {
-            self.castling.black_king
+        let castling_right = match (is_short, self.is_white) {
+            (true, true) => self.castling.white_kingside,
+            (true, false) => self.castling.black_kingside,
+            (false, true) => self.castling.white_queenside,
+            (false, false) => self.castling.black_queenside,
         };
 
         if self.get_player_pieces(!self.is_white).any(|full_piece| {
@@ -546,11 +572,8 @@ impl ChessBoard {
         if castling_squares.iter().any(|sq| self.get(sq).is_some()) {
             return Err(TurnError::CastlePathBlocked);
         }
-        if !matching_king {
-            return Err(TurnError::CastleKingMoved);
-        }
-        if !matching_rook {
-            return Err(TurnError::CastleRookMoved);
+        if !castling_right {
+            return Err(TurnError::CastleLostRights);
         }
         Ok(())
     }
@@ -881,11 +904,157 @@ impl Display for ChessBoard {
         write!(f, "{}", output)
     }
 }
+
+impl FromStr for ChessBoard {
+    type Err = &'static str;
+    /// parses a FEN string into a ChessBoard
+    ///
+    /// # Errors
+    ///
+    /// returns an error if the given FEN string is an invalid format
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let mut fen_split = s.split_whitespace();
+        let board = fen_split
+            .next()
+            .ok_or("Couldn't find the board information")?;
+        let player = fen_split
+            .next()
+            .ok_or("Couldn't find the player information")?;
+        let castling_rights = fen_split
+            .next()
+            .ok_or("Couldn't find the castling information")?;
+        let en_passant = fen_split
+            .next()
+            .ok_or("Couldn't find en passant information")?;
+        let half_move_clock = fen_split
+            .next()
+            .ok_or("Couldn't find half move clock information")?;
+        let turn_number = fen_split
+            .next()
+            .ok_or("Couldn't find the turn number information")?;
+        let None = fen_split.next() else {
+            return Err("Additional fields specified");
+        };
+
+        let mut piece_locs: HashMap<Square, Piece> = HashMap::new();
+        let mut board_squares = Square::iterator();
+        for rank in board.split('/') {
+            let mut count = 0;
+
+            for char in rank.chars() {
+                if let Some(num_empty) = char.to_digit(10) {
+                    count += num_empty;
+                    for _ in 0..num_empty {
+                        board_squares.next();
+                    }
+                    continue;
+                }
+                let sq = board_squares
+                    .next()
+                    .ok_or("Too many locations on the board")?;
+                count += 1;
+                let piece = Piece {
+                    piece: char
+                        .to_ascii_uppercase()
+                        .try_into()
+                        .map_err(|_| "Invalid character in board")?,
+                    is_white: char.is_ascii_uppercase(),
+                };
+                piece_locs.insert(sq, piece);
+            }
+            if count != 8 {
+                return Err("Invalid number of pieces on a line");
+            }
+        }
+
+        let is_white = match player {
+            "w" => true,
+            "b" => false,
+            _ => return Err("Invalid player specified"),
+        };
+
+        let mut castling = CastlingRights {
+            white_kingside: false,
+            white_queenside: false,
+            black_kingside: false,
+            black_queenside: false,
+        };
+        let mut castling_chars = castling_rights.chars();
+        let mut full_castling = vec!['K', 'Q', 'k', 'q'].into_iter();
+        let mut passed_chars = Vec::new();
+
+        let mut next_input_char = castling_chars.next();
+        let mut next_test_char = full_castling.next();
+        loop {
+            let current_target = match next_test_char {
+                Some('K') => &mut castling.white_kingside,
+                Some('Q') => &mut castling.white_queenside,
+                Some('k') => &mut castling.black_kingside,
+                Some('q') => &mut castling.black_queenside,
+                None if next_input_char.is_none() => break,
+                None if next_input_char.is_some() => {
+                    return Err("Additional characters specified after `q` which is the end")
+                }
+                _ => unreachable!(),
+            };
+
+            if next_test_char == next_input_char {
+                *current_target = true;
+                passed_chars.push(next_test_char);
+                next_input_char = castling_chars.next();
+                next_test_char = full_castling.next();
+            } else if next_input_char.is_none() {
+                break;
+            } else if next_input_char == Some('-') {
+                if castling_chars.next().is_some() {
+                    return Err("Additional characters specified after `-`");
+                }
+                break;
+            } else if !matches!(
+                next_input_char,
+                Some('K') | Some('Q') | Some('k') | Some('q')
+            ) {
+                return Err("Invalid characters in castling input");
+            } else if passed_chars.contains(&next_input_char) {
+                return Err("Out of order castling");
+            } else {
+                passed_chars.push(next_test_char);
+                next_test_char = full_castling.next();
+            }
+        }
+
+        let en_passant = match en_passant {
+            "-" => None,
+            sq if sq.len() == 2 => Some(
+                sq.parse::<Square>()
+                    .map_err(|_| "En passant was not a square")?,
+            ),
+            _ => return Err("En passant was not a square"),
+        };
+
+        let half_move_clock = half_move_clock
+            .parse::<u8>()
+            .map_err(|_| "Half move clock was not a number")?;
+        let full_move_number = turn_number
+            .parse::<u16>()
+            .map_err(|_| "Full move number was not a number")?;
+
+        Ok(ChessBoard {
+            piece_locs,
+            is_white,
+            castling,
+            en_passant,
+            half_move_clock,
+            full_move_number,
+        })
+    }
+}
+
 fn is_flag_set(flags: u8, check_flag: u8) -> bool {
     flags & check_flag != 0
 }
 
-#[derive(PartialEq, Clone, Copy, Debug, Default)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
 pub enum GameState {
     #[default]
     Continue,
@@ -893,18 +1062,18 @@ pub enum GameState {
     Draw(DrawType),
 }
 
-#[derive(Debug, Clone, Copy, PartialEq)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub struct Win {
     pub is_white: bool,
     pub kind: WinType,
 }
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum WinType {
     Checkmate,
     Resign,
 }
 
-#[derive(Clone, Copy, PartialEq, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 pub enum DrawType {
     Stalemate,
     FiftyMove,
@@ -913,24 +1082,31 @@ pub enum DrawType {
     Offer,
 }
 
-#[derive(PartialEq, Clone, Copy, Debug)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
 struct CastlingRights {
-    white_king: bool,
-    white_ra1: bool,
-    white_rh1: bool,
-    black_king: bool,
-    black_ra8: bool,
-    black_rh8: bool,
+    white_kingside: bool,
+    white_queenside: bool,
+    black_kingside: bool,
+    black_queenside: bool,
 }
 impl Default for CastlingRights {
     fn default() -> Self {
         CastlingRights {
-            white_king: true,
-            white_ra1: true,
-            white_rh1: true,
-            black_king: true,
-            black_ra8: true,
-            black_rh8: true,
+            white_kingside: true,
+            white_queenside: true,
+            black_kingside: true,
+            black_queenside: true,
         }
+    }
+}
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn parse_fen() {
+        let test = "rnbqkbnr/pp1ppppp/8/2p5/4P3/5N2/PPPP1PPP/RNBQKB1R b KQkq - 1 2";
+        assert!(test.parse::<ChessBoard>().is_ok());
+        let test = "lsefw sefwoe fjwofnwf weefwlkfn wlefkwlkfn sdf";
+        assert!(test.parse::<ChessBoard>().is_err());
     }
 }

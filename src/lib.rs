@@ -219,7 +219,7 @@ pub fn play_game(game: &mut ChessGame) {
             }
 
             let turn = parse_move(buf.trim())?;
-            let _full_turn = game.make_move(&turn)?;
+            game.make_move(&turn)?;
             Ok(false)
         })();
         match outcome {

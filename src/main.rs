@@ -1,10 +1,3 @@
-// chess
-// new features:
-//    customizable board, can place pieces wherever and then start playing
-//
-//    move a cursor around with arrow keys to select pieces, and show legal moves
-// TODO refactor once it works
-//
 use chess::*;
 use std::fs;
 
@@ -28,10 +21,9 @@ fn main() {
         .build();
     let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
 
-    play_from_pgn(&mut game, _pgn_string);
-    game.reset();
+    // play_from_pgn(&mut game, _pgn_string);
+    // game.reset();
     play_game(&mut game);
 
-    let pgn = game.gen_pgn();
-    println!("{}", pgn);
+    println!("{}\n{}", game.gen_pgn(), game.gen_fen());
 }

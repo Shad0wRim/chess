@@ -29,6 +29,7 @@ pub enum ParseErrorKind {
     NeedSquare,
     PromotionError(PromotionError),
     ConversionError(ConversionError),
+    InvalidFen,
 }
 
 impl Error for ParseErrorKind {
@@ -40,6 +41,7 @@ impl Error for ParseErrorKind {
             Self::NeedSquare => None,
             Self::ConversionError(e) => Some(e),
             Self::PromotionError(e) => Some(e),
+            Self::InvalidFen => None,
         }
     }
 }
@@ -52,6 +54,7 @@ impl Display for ParseErrorKind {
             Self::NeedSquare => write!(f, "Need to specify a destination square such as 'e4'"),
             Self::PromotionError(_) => write!(f, "Invalid promotion specified"),
             Self::ConversionError(_) => write!(f, "Couldn't convert the string into a valid move"),
+            Self::InvalidFen => write!(f, "Couldn't convert the string into a valid board state"),
         }
     }
 }

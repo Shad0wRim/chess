@@ -1,3 +1,4 @@
+use std::fmt;
 use std::str::FromStr;
 
 use crate::parser::ConversionError;
@@ -9,6 +10,19 @@ pub enum PieceType {
     Bishop,
     Knight,
     Pawn,
+}
+impl fmt::Display for PieceType {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let piece_letter = match self {
+            Self::King => 'K',
+            Self::Queen => 'Q',
+            Self::Rook => 'R',
+            Self::Bishop => 'B',
+            Self::Knight => 'N',
+            Self::Pawn => 'P',
+        };
+        write!(f, "{}", piece_letter)
+    }
 }
 impl FromStr for PieceType {
     type Err = ConversionError;
