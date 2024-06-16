@@ -11,30 +11,49 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use crate::counter::Counter;
 use crate::parser::Flag;
 use crate::pieces::{Piece, PieceType};
 use crate::turn::{CastlingType, Move, Turn};
+use crate::utils::Counter;
 
 #[derive(Debug)]
+/// Ways that a turn can be incorrect
 pub enum TurnError {
+    /// No piece can move to the specified destination
     NoTarget,
+    /// Need a line disambiguation to determine which piece moves
     NeedLine,
+    /// Need a file disambiguation to determine which piece moves
     NeedFile,
+    /// Need a square disambiguation to determine which piece moves
     NeedSquare,
+    /// A disambiguation was provided that was overspecific and unneeded
     OverSpecification,
+    /// There is no eligible piece at the specified source square
     MissingAtSquare,
+    /// There is no eligible piece at the specified source line
     MissingInLine,
+    /// There are multiple eligible pieces in the specified source line
     BothInLine,
+    /// The move specified leaves the king in check
     KingInCheck,
+    /// Cannot castle due to losing the rights
     CastleLostRights,
+    /// Cannot castle due to pieces being in the way
     CastlePathBlocked,
+    /// Cannot castle due to opposing pieces targetting the castling squares
     CastleThroughCheck,
+    /// Need to add the `+` flag for a check
     NeedCheckSpecifier,
+    /// Need to add the `#` flag for a checkmate
     NeedCheckmateSpecifier,
+    /// Need to add the `x` flag for a capture
     NeedCaptureSpecifier,
+    /// Need to remove the `#` flag for a non-checkmate
     RemoveCheckmateSpecifier,
+    /// Need to remove the `+` flag for a non-check
     RemoveCheckSpecifier,
+    /// Need to remove the `x` flag for a non-capture
     RemoveCaptureSpecifier,
 }
 
@@ -79,6 +98,10 @@ impl Display for TurnError {
 }
 
 #[derive(Debug, Clone, PartialEq)]
+/// Stores the current board state
+///
+/// Includes the piece locations, current turn, castling rights, en passant rights, half move
+/// clock, and the full move number
 pub struct ChessBoard {
     piece_locs: HashMap<Square, Piece>,
     is_white: bool,
@@ -89,6 +112,11 @@ pub struct ChessBoard {
 }
 
 impl ChessBoard {
+    /// Returns the fully qualified turn by determining the source of the piece
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if the move is illegal or if the source cannot be determined
     pub fn validate_and_complete_turn(&self, turn: Turn) -> Result<Turn, TurnError> {
         match turn {
             Turn::Move(r#move) => {
@@ -101,6 +129,16 @@ impl ChessBoard {
             }
         }
     }
+    /// Updates the piece locations given a fully qualified turn with the source square specified
+    ///
+    /// # Side effects
+    ///
+    /// Updates the piece locations, current player, en passant square, half move clock, and full
+    /// move number
+    ///
+    /// # Panics
+    ///
+    /// Panics if the turn is a move and does not have [Source::Square] as the source
     pub fn update_board(&mut self, turn: &Turn) {
         match turn {
             Turn::Castling(castling_type, _) => {
@@ -273,9 +311,11 @@ impl ChessBoard {
         }
         self.is_white = !self.is_white;
     }
+    /// Returns what the gamestate is based on the board state and the position history
+    ///
+    /// The current player must be the player who will play next, rather than the player who just
+    /// made the move, so this function must be run after [ChessBoard::update_board]
     pub fn check_gamestate(&self, position_hist: &Counter<String>) -> GameState {
-        // self.is_white must be the player who plays next
-
         let mut moves: Vec<Turn> = Vec::new();
         for pc in self.get_player_pieces(self.is_white) {
             let this_piece_moves = self.gen_moves(pc);
@@ -320,9 +360,11 @@ impl ChessBoard {
 
         GameState::Continue
     }
+    /// Returns whether the current player is white
     pub fn is_white(&self) -> bool {
         self.is_white
     }
+    /// Returns an error if the flags provided in a turn are invalid
     pub fn enforce_flags(&self, turn: &Turn) -> Result<(), TurnError> {
         let flags = match turn {
             Turn::Castling(_, flag) => *flag,
@@ -362,6 +404,7 @@ impl ChessBoard {
         }
         Ok(())
     }
+    /// Returns the inputted turn with the proper flags set
     pub fn gen_flags(&self, turn: Turn) -> Turn {
         let mut flags: u8 = 0;
         if self.causes_checkmate(&turn) {
@@ -380,6 +423,7 @@ impl ChessBoard {
             Turn::Move(r#move) => Turn::Move(Move { flags, ..r#move }),
         }
     }
+    /// Returns the fen string for the current board state
     pub fn gen_fen(&self) -> String {
         let mut fen = String::new();
 
@@ -577,6 +621,12 @@ impl ChessBoard {
         }
         Ok(())
     }
+    /// Returns the turn with the least amount of information to fully specify a move, given a
+    /// fully qualified move.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the input move does not have a [Source::Square] as the source.
     pub fn get_minimum_move(&self, turn: &Turn) -> Turn {
         match turn {
             Turn::Castling(_, _) => *turn,
@@ -1055,30 +1105,50 @@ fn is_flag_set(flags: u8, check_flag: u8) -> bool {
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Default)]
+/// The current game state
 pub enum GameState {
     #[default]
+    /// Game is still in play
     Continue,
+    /// Game has been won by some player
     Win(Win),
+    /// Game has been drawn
     Draw(DrawType),
+    /// Game has been aborted
+    Stop,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// The information describing the win state
 pub struct Win {
+    /// The player who won, true if white
     pub is_white: bool,
+    /// The type of win
     pub kind: WinType,
 }
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// The type of win
 pub enum WinType {
+    /// Win by checkmate
     Checkmate,
+    /// Win by resignation
     Resign,
+    /// Win by timeout
+    Timeout,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
+/// The type of draw
 pub enum DrawType {
+    /// Draw by stalemate
     Stalemate,
+    /// Draw by the fifty move rule
     FiftyMove,
+    /// Draw by threefold repetition
     ThreefoldRepitition,
+    /// Draw by insufficient material
     InsufficientMaterial,
+    /// Draw by draw offer
     Offer,
 }
 

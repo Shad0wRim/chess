@@ -3,6 +3,7 @@ use std::str::FromStr;
 
 use crate::parser::ConversionError;
 #[derive(Clone, Debug, Copy, PartialEq)]
+/// The type of a piece
 pub enum PieceType {
     King,
     Queen,

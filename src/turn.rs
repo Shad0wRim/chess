@@ -13,11 +13,15 @@ use crate::{
 };
 
 #[derive(Debug, Clone, PartialEq, Copy)]
+/// The type of turn
 pub enum Turn {
+    /// A castling turn
     Castling(CastlingType, u8),
+    /// A piece move turn
     Move(Move),
 }
 impl Turn {
+    /// Creates a new turn from a piece, its location, and the destination square.
     pub fn new((loc, piece): (Square, Piece), dst: Square) -> Turn {
         Turn::Move(Move {
             piece: piece.piece,

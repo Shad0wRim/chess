@@ -4,6 +4,7 @@ pub use piece_type::PieceType;
 use std::fmt;
 
 #[derive(Clone, Debug, PartialEq, Copy)]
+/// A chess piece
 pub struct Piece {
     pub piece: PieceType,
     pub is_white: bool,

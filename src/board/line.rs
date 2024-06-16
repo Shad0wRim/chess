@@ -10,7 +10,6 @@ pub enum Line {
    FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH,
 }
 
-#[allow(dead_code)]
 impl Line {
     pub fn new(rank_or_file: char) -> Result<Line, &'static str> {
         match rank_or_file {

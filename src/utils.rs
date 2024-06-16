@@ -1,3 +1,4 @@
+use std::error::Error;
 use std::{collections::HashMap, hash::Hash};
 
 #[derive(Debug, Clone)]
@@ -37,5 +38,15 @@ impl<Key: Hash + Eq> Counter<Key> {
 impl<Key: Hash + Eq> Default for Counter<Key> {
     fn default() -> Self {
         Counter::new()
+    }
+}
+
+/// Utility function that prints out errors, including their source
+pub fn print_all_errors<T: Error + ?Sized>(err: &T) {
+    println!("{}", err);
+    let mut next = err.source();
+    while let Some(e) = next {
+        println!("{}", e);
+        next = e.source();
     }
 }

@@ -88,6 +88,11 @@ impl Display for ConversionError {
     }
 }
 
+/// Parses a move from an algebraic chess notation string.
+///
+/// # Errors
+///
+/// Returns an error if the input string is not valid algebraic notation.
 pub fn parse_move(input: &str) -> Result<Turn, ChessParseError> {
     if !input
         .chars()
