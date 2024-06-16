@@ -300,7 +300,7 @@ pub fn play_game(game: &mut ChessGame) {
     }
 }
 
-/// plays a game of chess from a pgn string, progressing when [Enter] is pressed
+/// plays a game of chess from a pgn string, progressing when \[Enter\] is pressed
 pub fn play_from_pgn(game: &mut ChessGame, file_string: String) {
     let mut buf = String::new();
     let scan_between = |open_delimiter: char, close_delimiter: char, keep: bool| {
