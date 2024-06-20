@@ -1,3 +1,4 @@
+//! Local chess game in the terminal
 use chess::utils::print_all_errors;
 use chess::*;
 use std::fs;

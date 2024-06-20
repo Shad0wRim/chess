@@ -1,5 +1,7 @@
 #![warn(missing_docs)]
-//! crate docs
+//! Chess board representation
+//!
+//! Provides a board representation to create a chess game
 mod board;
 mod parser;
 mod pieces;
