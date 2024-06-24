@@ -6,6 +6,8 @@ use crate::parser::ConversionError;
 #[derive(Debug, Hash, Copy, Clone, PartialEq, Eq)]
 #[repr(u8)]
 #[rustfmt::skip]
+#[allow(missing_docs)]
+/// Square on the board
 pub enum Square {
    A8, B8, C8, D8, E8, F8, G8, H8,
    A7, B7, C7, D7, E7, F7, G7, H7,
@@ -18,6 +20,7 @@ pub enum Square {
 }
 
 impl Square {
+    /// Returns the rank that the square is on
     pub fn rank(&self) -> Line {
         match self {
             Self::A1
@@ -86,6 +89,7 @@ impl Square {
             | Self::H8 => Line::Rank8,
         }
     }
+    /// Returns the file that the square is on
     pub fn file(&self) -> Line {
         match self {
             Self::A1
@@ -154,6 +158,7 @@ impl Square {
             | Self::H8 => Line::FileH,
         }
     }
+    /// Returns whether the square is a light square or not
     pub fn is_light(&self) -> bool {
         matches!(
             self,
@@ -191,6 +196,8 @@ impl Square {
                 | Self::H1
         )
     }
+    /// Returns the square that is above the current square, from the orientation of the white
+    /// player. Returns `None` if on the top rank
     pub fn up(&self) -> Option<Square> {
         match self.rank() {
             Line::Rank1 => Line::Rank2.intersection(&self.file()),
@@ -204,6 +211,8 @@ impl Square {
             _ => unreachable!(),
         }
     }
+    /// Returns the square that is below the current square, from the orientation of the white
+    /// player. Returns `None` if on the bottom rank
     pub fn down(&self) -> Option<Square> {
         match self.rank() {
             Line::Rank1 => None,
@@ -217,6 +226,8 @@ impl Square {
             _ => unreachable!(),
         }
     }
+    /// Returns the square that is to the right of the current square, from the orientation of the white
+    /// player. Returns `None` if on the rightmost file
     pub fn right(&self) -> Option<Square> {
         match self.file() {
             Line::FileA => Line::FileB.intersection(&self.rank()),
@@ -230,6 +241,8 @@ impl Square {
             _ => unreachable!(),
         }
     }
+    /// Returns the square that is to the left of the current square, from the orientation of the white
+    /// player. Returns `None` if on the leftmost file
     pub fn left(&self) -> Option<Square> {
         match self.file() {
             Line::FileA => None,
@@ -243,18 +256,27 @@ impl Square {
             _ => unreachable!(),
         }
     }
+    /// Returns the square that is to the up-right of the current square, from the orientation of the white
+    /// player. Returns `None` if on the rightmost file or top rank
     pub fn up_right(&self) -> Option<Square> {
         self.up()?.right()
     }
+    /// Returns the square that is to the up-left of the current square, from the orientation of the white
+    /// player. Returns `None` if on the leftmost file or top rank
     pub fn up_left(&self) -> Option<Square> {
         self.up()?.left()
     }
+    /// Returns the square that is to the down-right of the current square, from the orientation of the white
+    /// player. Returns `None` if on the rightmost file or bottom rank
     pub fn down_right(&self) -> Option<Square> {
         self.down()?.right()
     }
+    /// Returns the square that is to the down-left of the current square, from the orientation of the white
+    /// player. Returns `None` if on the leftmost file or bottom rank
     pub fn down_left(&self) -> Option<Square> {
         self.down()?.left()
     }
+    /// Returns an iterator over the squares, rank
     pub fn iterator() -> impl Iterator<Item = Square> {
         unsafe { (Self::A8 as u8..=Self::H1 as u8).map(|num| std::mem::transmute(num)) }
     }

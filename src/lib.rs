@@ -2,10 +2,13 @@
 //! Chess board representation
 //!
 //! Provides a board representation to create a chess game
-mod board;
+/// Types and functions that concern the board state
+pub mod board;
 mod parser;
-mod pieces;
-mod turn;
+/// Types and functions that concern the pieces
+pub mod pieces;
+/// Types and functions that concern the turn/move descriptions
+pub mod turn;
 /// Utility structs and functions for miscellaneous tasks
 pub mod utils;
 
@@ -15,7 +18,7 @@ pub use turn::Turn;
 
 use utils::Counter;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 /// Structure that holds the chess board, game history, and configuration data
 pub struct ChessGame {
     board: ChessBoard,
@@ -173,31 +176,66 @@ impl ChessGame {
         }
         Ok(())
     }
-    /// Returns the string that presents the visual state of the board, depending on the perspective set in rotate_board
-    pub fn display(&self) -> String {
-        // const ED2: &str = "\x1b[2J";
+    /// Displays the visual state of the board, depending on the perspective set in rotate_board
+    pub fn display(&self) {
         const ED0: &str = "\x1b[J";
         const CUP: &str = "\x1b[H";
-        let buf = match self.rotate_board {
+        let board = match self.rotate_board {
             RotateBoard::White => format!("{}", self.board),
             RotateBoard::Black => format!("{:#}", self.board),
-            RotateBoard::Rotate if self.board.is_white() => format!("{}", self.board),
+            RotateBoard::Rotate if self.is_white() => format!("{}", self.board),
             RotateBoard::Rotate => format!("{:#}", self.board),
         };
-        // print!("{}", ED2);
         print!("{}", CUP);
         print!("{}", ED0);
-        print!("{}", buf);
+        print!("{}", board);
         let curr_player = if self.board.is_white() {
             &self.players.0
         } else {
             &self.players.1
         };
-        buf + curr_player
+        println!("{curr_player}'s turn");
+    }
+    /// Returns the string that representst the visual state of the board, depending on the
+    /// perspective set in rotate_board
+    pub fn board_string(&self) -> String {
+        match self.rotate_board {
+            RotateBoard::White => format!("{}", self.board),
+            RotateBoard::Black => format!("{:#}", self.board),
+            RotateBoard::Rotate if self.is_white() => format!("{}", self.board),
+            RotateBoard::Rotate => format!("{:#}", self.board),
+        }
+    }
+    /// Returns the string that says which player's turn it is
+    pub fn player_string(&self) -> String {
+        if self.is_white() {
+            &self.players.0
+        } else {
+            &self.players.1
+        }
+        .clone()
+            + "'s turn"
     }
     /// Returns true if the current player is white, false if it is black
     pub fn is_white(&self) -> bool {
         self.board.is_white()
+    }
+    /// Returns a reference to the game history
+    pub fn game_hist(&self) -> &Vec<Turn> {
+        &self.game_hist
+    }
+    /// Returns the turn with the least amount of information to fully specify a move, given a
+    /// fully qualified move.
+    ///
+    /// # Panics
+    ///
+    /// Panics if the input move does not have a [Source::Square] as the source.
+    pub fn get_minimum_move(&self, turn: &Turn) -> Turn {
+        self.board.get_minimum_move(turn)
+    }
+    /// Returns an immutable reference to the board
+    pub fn board(&self) -> &ChessBoard {
+        &self.board
     }
 }
 

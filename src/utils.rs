@@ -57,3 +57,13 @@ pub fn print_all_errors<T: Error + ?Sized>(err: &T) {
         next = e.source();
     }
 }
+/// Utility function that returns a string of all errors, including their source
+pub fn all_errors_string<T: Error + ?Sized>(err: &T) -> String {
+    let mut error_string = format!("{err}");
+    let mut next = err.source();
+    while let Some(e) = next {
+        error_string += &format!("\n{e}");
+        next = e.source();
+    }
+    error_string
+}

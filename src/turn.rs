@@ -8,7 +8,7 @@ pub use r#move::Move;
 
 use crate::{
     board::{Source, Square},
-    parser::{parse_move, Flag},
+    parser::{parse_move, ChessParseError, Flag},
     pieces::{Piece, PieceType},
 };
 
@@ -23,20 +23,34 @@ pub enum Turn {
 impl Turn {
     /// Creates a new turn from a piece, its location, and the destination square.
     pub fn new((loc, piece): (Square, Piece), dst: Square) -> Turn {
-        Turn::Move(Move {
-            piece: piece.piece,
-            dst,
-            flags: 0,
-            src: Some(Source::Square(loc)),
-            promotion: None,
-        })
+        if piece.piece == PieceType::King && (loc == Square::E1 || loc == Square::E8) {
+            match dst {
+                Square::G1 | Square::G8 => Turn::Castling(CastlingType::Short, 0),
+                Square::C1 | Square::C8 => Turn::Castling(CastlingType::Long, 0),
+                _ => Turn::Move(Move {
+                    piece: piece.piece,
+                    dst,
+                    flags: 0,
+                    src: Some(Source::Square(loc)),
+                    promotion: None,
+                }),
+            }
+        } else {
+            Turn::Move(Move {
+                piece: piece.piece,
+                dst,
+                flags: 0,
+                src: Some(Source::Square(loc)),
+                promotion: None,
+            })
+        }
     }
 }
 
 impl FromStr for Turn {
-    type Err = &'static str;
+    type Err = ChessParseError;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        parse_move(s).map_err(|_| "Failed to parse string into chess move")
+        parse_move(s)
     }
 }
 

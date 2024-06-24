@@ -77,7 +77,7 @@ impl Display for TurnError {
             TurnError::BothInLine => write!(f, "Both potential pieces found in the line specified"),
             TurnError::KingInCheck => write!(f, "That move causes the king to be in check"),
             TurnError::CastleLostRights => write!(f, "Lost the right to castle"),
-            TurnError::CastlePathBlocked => write!(f, "Can't castle becuase the path is blocked"),
+            TurnError::CastlePathBlocked => write!(f, "Can't castle because the path is blocked"),
             TurnError::CastleThroughCheck => {
                 write!(f, "Can't castle because the king would move through check")
             }
@@ -271,6 +271,17 @@ impl ChessBoard {
                     },
                 );
 
+                // update the board
+                self.remove(&src);
+                self.insert(piece);
+                if self.en_passant.is_some_and(|sq| sq == r#move.dst) {
+                    if self.is_white {
+                        self.remove(&r#move.dst.down().expect("is valid square"));
+                    } else {
+                        self.remove(&r#move.dst.up().expect("is valid square"));
+                    }
+                }
+
                 // update en passant
                 if r#move.piece == PieceType::Pawn
                     && if self.is_white {
@@ -284,17 +295,6 @@ impl ChessBoard {
                     self.en_passant = if self.is_white { src.up() } else { src.down() };
                 } else {
                     self.en_passant = None;
-                }
-
-                // update the board
-                self.remove(&src);
-                self.insert(piece);
-                if self.en_passant.is_some_and(|sq| sq == r#move.dst) {
-                    if self.is_white {
-                        self.remove(&r#move.dst.down().expect("is valid square"));
-                    } else {
-                        self.remove(&r#move.dst.up().expect("is valid square"));
-                    }
                 }
             }
         }
@@ -372,7 +372,8 @@ impl ChessBoard {
         };
         if let Turn::Move(r#move) = turn {
             match (
-                self.get(&r#move.dst).is_some(),
+                self.get(&r#move.dst).is_some()
+                    || self.en_passant.is_some_and(|sq| sq == r#move.dst),
                 is_flag_set(flags, Flag::CAPTURE),
             ) {
                 (true, true) => (),
@@ -413,7 +414,7 @@ impl ChessBoard {
             flags |= Flag::CHECK;
         }
         if let Turn::Move(Move { dst, .. }) = turn {
-            if self.get(&dst).is_some() {
+            if self.get(&dst).is_some() || self.en_passant.is_some_and(|sq| sq == dst) {
                 flags |= Flag::CAPTURE;
             }
         };
@@ -571,6 +572,16 @@ impl ChessBoard {
                     }
                     let source = matching_moves[0].0;
                     Ok(Source::Square(source))
+                } else if let Some(Source::Square(sq)) = r#move.src {
+                    let matching_moves = potential_moves
+                        .iter()
+                        .filter(|(loc, _)| *loc == sq)
+                        .collect::<Vec<_>>();
+                    if matching_moves.is_empty() {
+                        return Err(TurnError::MissingAtSquare);
+                    }
+                    let source = matching_moves[0].0;
+                    Ok(Source::Square(source))
                 } else {
                     Err(TurnError::NeedLine)
                 }
@@ -682,7 +693,9 @@ impl ChessBoard {
             false
         }
     }
-    fn get(&self, sq: &Square) -> Option<&Piece> {
+    /// Returns the piece at the provided square, returns `None` if there is no piece at that
+    /// square
+    pub fn get(&self, sq: &Square) -> Option<&Piece> {
         self.piece_locs.get(sq)
     }
     fn insert(&mut self, piece: (Square, Piece)) {
@@ -923,7 +936,6 @@ impl Display for ChessBoard {
                 .map(|c| Line::new(c).expect("hard coded value is safe"))
                 .enumerate()
             {
-                output.push('\t');
                 output.push_str(&(i + 1).to_string());
                 output.push(' ');
                 let line: String = rank
@@ -933,14 +945,13 @@ impl Display for ChessBoard {
                     .collect();
                 output.push_str(&(line + "\n"));
             }
-            output.push_str("\t  h g f e d c b a\n");
+            output.push_str("  h g f e d c b a \n");
         } else {
             for (i, rank) in ('1'..='8')
                 .map(|c| Line::new(c).expect("hard coded value is safe"))
                 .rev()
                 .enumerate()
             {
-                output.push('\t');
                 output.push_str(&(8 - i).to_string());
                 output.push(' ');
                 let line: String = rank
@@ -949,7 +960,7 @@ impl Display for ChessBoard {
                     .collect();
                 output.push_str(&(line + "\n"));
             }
-            output.push_str("\t  a b c d e f g h\n");
+            output.push_str("  a b c d e f g h \n");
         }
         write!(f, "{}", output)
     }

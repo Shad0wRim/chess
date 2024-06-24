@@ -5,12 +5,15 @@ use lines::*;
 
 #[derive(Debug, Clone, PartialEq, Copy)]
 #[rustfmt::skip]
+#[allow(missing_docs)]
+/// A rank or file on the chess board
 pub enum Line {
    Rank1, Rank2, Rank3, Rank4, Rank5, Rank6, Rank7, Rank8,
    FileA, FileB, FileC, FileD, FileE, FileF, FileG, FileH,
 }
 
 impl Line {
+    /// Creates a new rank or file from the corresponding character in chess notation
     pub fn new(rank_or_file: char) -> Result<Line, &'static str> {
         match rank_or_file {
             '1' => Ok(Self::Rank1),
@@ -32,6 +35,8 @@ impl Line {
             _ => Err("cannot create line from that character"),
         }
     }
+    /// Creates a vector of all of the squares in the line, from increasing alphabetical or
+    /// numerical order
     pub fn to_vec(self) -> Vec<Square> {
         match self {
             Line::Rank1 => RANK_1.to_owned(),
@@ -52,6 +57,8 @@ impl Line {
             Line::FileH => FILE_H.to_owned(),
         }
     }
+    /// Finds the square at the intersection of two lines, returns `None` if the two lines are both
+    /// a rank or both a file.
     pub fn intersection(&self, line: &Line) -> Option<Square> {
         match self {
             Line::Rank1 => match line {
@@ -232,6 +239,7 @@ impl Line {
             },
         }
     }
+    /// Returns true if the line is a file, false if it is a rank
     pub fn is_file(&self) -> bool {
         matches!(
             self,
@@ -245,6 +253,7 @@ impl Line {
                 | Line::FileH
         )
     }
+    /// Returns true if the line is a rank, false if it is a file
     pub fn is_rank(&self) -> bool {
         matches!(
             self,

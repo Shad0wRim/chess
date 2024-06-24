@@ -6,11 +6,14 @@ use std::fmt;
 #[derive(Clone, Debug, PartialEq, Copy)]
 /// A chess piece
 pub struct Piece {
+    /// The type of piece
     pub piece: PieceType,
+    /// Whether the piece is owned by the white player or not
     pub is_white: bool,
 }
 
 impl Piece {
+    /// Creates a new chess piece from its type and its owner
     pub fn new(piece: PieceType, is_white: bool) -> Piece {
         Piece { piece, is_white }
     }
