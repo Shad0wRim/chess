@@ -11,7 +11,7 @@ use chess::{
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Layout},
-    style::{Style, Stylize},
+    style::{Color, Style, Stylize},
     text::{Line, Span, Text},
     widgets::{Block, List, ListItem, ListState, Paragraph},
     Frame,
@@ -247,9 +247,6 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
         if let Event::Key(key) = event::read()? {
             match app.input_mode {
                 InputMode::Visual => match key.code {
-                    KeyCode::Char('q') => {
-                        return Ok(());
-                    }
                     KeyCode::Char('a') => {
                         app.input_mode = InputMode::Algebraic;
                     }
@@ -303,26 +300,42 @@ fn ui(f: &mut Frame, app: &App) {
     let bottom_layout = Layout::horizontal([Constraint::Min(0), Constraint::Length(20)]);
     let [error_area, move_area] = bottom_layout.areas(chunks[2]);
 
-    let board_string = app.game.board_string();
     let player_string = app.game.player_string();
 
+    let mut all_square_strs = Square::iterator()
+        .map(|sq| (sq, app.game.board().get(&sq)))
+        .map(|(sq, pc)| {
+            let pc_string = if let Some(pc) = pc {
+                pc.to_string() + " "
+            } else {
+                "  ".to_string()
+            };
+            pc_string
+                .bg(if sq.is_light() {
+                    Color::White
+                } else {
+                    Color::LightGreen
+                })
+                .black()
+        })
+        .collect::<Vec<_>>()
+        .chunks(8)
+        .scan(9, |rank, chunk| {
+            *rank -= 1;
+            Some(Line::from_iter(
+                [Span::from(rank.to_string() + " ")]
+                    .into_iter()
+                    .chain(chunk.to_vec().into_iter())
+                    .chain([Span::raw("\n")]),
+            ))
+        })
+        .chain([Line::from("  a b c d e f g h")])
+        .collect::<Vec<_>>();
+    all_square_strs.push(Line::from(player_string.as_str()));
+
     let (board, style): (Vec<Line<'_>>, _) = match app.input_mode {
-        InputMode::Visual => (
-            board_string
-                .lines()
-                .chain(player_string.lines())
-                .map(|str| str.into())
-                .collect(),
-            Style::default().gray().on_black(),
-        ),
-        InputMode::Algebraic => (
-            board_string
-                .lines()
-                .chain(player_string.lines())
-                .map(|str| str.into())
-                .collect(),
-            Style::default(),
-        ),
+        InputMode::Visual => (all_square_strs, Style::default().gray().on_black()),
+        InputMode::Algebraic => (all_square_strs, Style::default()),
     };
     let board = Text::from(board).patch_style(style);
     let board = Paragraph::new(board).block(Block::bordered().style(match app.input_mode {
