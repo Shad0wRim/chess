@@ -1,17 +1,22 @@
 //! Local chess game in the terminal
 mod tui;
 
-use std::io;
-
-use chess::{board::Square, pieces::Piece, utils::all_errors_string, ChessGame, GameState, Turn};
+use chess::{
+    board::{DrawType, GameState, Square, Win, WinType},
+    pieces::Piece,
+    turn::Turn,
+    utils::all_errors_string,
+    ChessGame,
+};
 use crossterm::event::{self, Event, KeyCode, KeyEventKind};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, List, ListItem, Paragraph},
+    widgets::{Block, List, ListItem, ListState, Paragraph},
     Frame,
 };
+use std::io;
 use tui::Tui;
 
 fn main() -> std::io::Result<()> {
@@ -58,28 +63,16 @@ impl App {
         }
     }
     fn move_board_left(&mut self) {
-        self.board_location = match self.board_location.left() {
-            Some(next) => next,
-            None => self.board_location,
-        }
+        self.board_location = self.board_location.left().unwrap_or(self.board_location);
     }
     fn move_board_right(&mut self) {
-        self.board_location = match self.board_location.right() {
-            Some(next) => next,
-            None => self.board_location,
-        }
+        self.board_location = self.board_location.right().unwrap_or(self.board_location);
     }
     fn move_board_down(&mut self) {
-        self.board_location = match self.board_location.down() {
-            Some(next) => next,
-            None => self.board_location,
-        }
+        self.board_location = self.board_location.down().unwrap_or(self.board_location);
     }
     fn move_board_up(&mut self) {
-        self.board_location = match self.board_location.up() {
-            Some(next) => next,
-            None => self.board_location,
-        }
+        self.board_location = self.board_location.up().unwrap_or(self.board_location);
     }
     fn move_cursor_left(&mut self) {
         let cursor_moved_left = self.character_index.saturating_sub(1);
@@ -114,7 +107,6 @@ impl App {
             self.move_cursor_left();
         }
     }
-
     fn clamp_cursor(&self, new_cursor_pos: usize) -> usize {
         new_cursor_pos.clamp(0, self.input.chars().count())
     }
@@ -127,19 +119,19 @@ impl App {
         self.input.clear();
         self.reset_cursor();
     }
-    fn end_game(&mut self) {
+    fn handle_gamestate(&mut self) {
         match self.game.game_state {
-            GameState::Continue => unreachable!(),
+            GameState::Continue => return,
             GameState::Win(win) => {
-                let win_message = String::from(if win.is_white {
+                let win_message = String::from(if !win.is_white {
                     &self.game.players.0
                 } else {
                     &self.game.players.1
                 }) + " wins by "
                     + match win.kind {
-                        chess::WinType::Checkmate => "checkmate",
-                        chess::WinType::Resign => "resignation",
-                        chess::WinType::Timeout => "timout",
+                        WinType::Checkmate => "checkmate",
+                        WinType::Resign => "resignation",
+                        WinType::Timeout => "timout",
                     };
                 self.error_messages.clear();
                 self.error_messages.push(win_message);
@@ -147,11 +139,11 @@ impl App {
             GameState::Draw(draw) => {
                 let draw_message = String::from("The game is a draw by ")
                     + match draw {
-                        chess::DrawType::Stalemate => "stalemate",
-                        chess::DrawType::FiftyMove => "the fifty move rule",
-                        chess::DrawType::ThreefoldRepitition => "threefold repetition",
-                        chess::DrawType::InsufficientMaterial => "insufficient material",
-                        chess::DrawType::Offer => "draw offer",
+                        DrawType::Stalemate => "stalemate",
+                        DrawType::FiftyMove => "the fifty move rule",
+                        DrawType::ThreefoldRepitition => "threefold repetition",
+                        DrawType::InsufficientMaterial => "insufficient material",
+                        DrawType::Offer => "draw offer",
                     };
                 self.error_messages.clear();
                 self.error_messages.push(draw_message);
@@ -162,6 +154,8 @@ impl App {
                     .push(String::from("The game was aborted"));
             }
         }
+        self.error_messages
+            .push(String::from("Press any key to quit"));
         self.stop = true;
     }
     fn select_piece(&mut self) {
@@ -195,12 +189,13 @@ impl App {
                 self.error_messages.extend_from_slice(&split_errors);
             }
         }
+        self.handle_gamestate();
     }
     fn handle_input(&mut self) {
         match self.input.trim() {
-            "u" => match self.game.undo_move() {
-                Ok(_) => return,
-                Err(_) => {
+            "undo" => match self.game.undo_move() {
+                Some(_) => return,
+                None => {
                     self.error_messages
                         .extend_from_slice(&["Undoing is not allowed".to_string()]);
                     return;
@@ -208,16 +203,16 @@ impl App {
             },
             "quit" => self.game.game_state = GameState::Stop,
             "resign" => {
-                self.game.game_state = GameState::Win(chess::Win {
+                self.game.game_state = GameState::Win(Win {
                     is_white: self.game.is_white(),
-                    kind: chess::WinType::Resign,
+                    kind: WinType::Resign,
                 })
             }
-            "draw" => self.game.game_state = GameState::Draw(chess::DrawType::Offer),
+            "draw" => self.game.game_state = GameState::Draw(DrawType::Offer),
             _ => (),
         }
         if self.game.game_state != GameState::Continue {
-            self.end_game();
+            self.handle_gamestate();
             return;
         }
 
@@ -288,6 +283,11 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
                 InputMode::Algebraic => {}
             }
         }
+        if app.stop {
+            terminal.draw(|f| ui(f, &app))?;
+            event::read()?;
+            return Ok(());
+        }
     }
 }
 
@@ -341,28 +341,8 @@ fn ui(f: &mut Frame, app: &App) {
 
     match app.input_mode {
         InputMode::Visual => {
-            let y_offset = match app.board_location.rank() {
-                chess::board::Line::Rank1 => 0,
-                chess::board::Line::Rank2 => 1,
-                chess::board::Line::Rank3 => 2,
-                chess::board::Line::Rank4 => 3,
-                chess::board::Line::Rank5 => 4,
-                chess::board::Line::Rank6 => 5,
-                chess::board::Line::Rank7 => 6,
-                chess::board::Line::Rank8 => 7,
-                _ => unreachable!(),
-            };
-            let x_offset = match app.board_location.file() {
-                chess::board::Line::FileA => 0,
-                chess::board::Line::FileB => 1,
-                chess::board::Line::FileC => 2,
-                chess::board::Line::FileD => 3,
-                chess::board::Line::FileE => 4,
-                chess::board::Line::FileF => 5,
-                chess::board::Line::FileG => 6,
-                chess::board::Line::FileH => 7,
-                _ => unreachable!(),
-            };
+            let y_offset = rank_offset(app);
+            let x_offset = file_offset(app);
             f.set_cursor(board_area.x + 3 + x_offset * 2, board_area.y + 8 - y_offset);
         }
         InputMode::Algebraic => {
@@ -378,7 +358,7 @@ fn ui(f: &mut Frame, app: &App) {
         .iter()
         .enumerate()
         .map(|(i, m)| {
-            let content = Line::from(Span::raw(format!("{i}: {m}")));
+            let content = Line::from(Span::raw(format!("{}: {m}", i + 1)));
             ListItem::new(content)
         })
         .collect();
@@ -398,7 +378,7 @@ fn ui(f: &mut Frame, app: &App) {
             turn_string += &turn1.to_string();
 
             if let Some(turn2) = turns.get(1) {
-                let turn2 = board.get_minimum_move(&turn2);
+                let turn2 = board.get_minimum_move(turn2);
                 board.make_move(&turn2).expect("History is always valid");
 
                 turn_string.push(' ');
@@ -414,13 +394,42 @@ fn ui(f: &mut Frame, app: &App) {
         })
         .collect();
     let game_history = List::new(game_history).block(Block::bordered().title("Game History"));
-    f.render_widget(game_history, move_area);
+    let mut list_state = ListState::default().with_selected(Some(usize::MAX));
+    f.render_stateful_widget(game_history, move_area, &mut list_state);
+}
+
+fn file_offset(app: &App) -> u16 {
+    match app.board_location.file() {
+        chess::board::Line::FileA => 0,
+        chess::board::Line::FileB => 1,
+        chess::board::Line::FileC => 2,
+        chess::board::Line::FileD => 3,
+        chess::board::Line::FileE => 4,
+        chess::board::Line::FileF => 5,
+        chess::board::Line::FileG => 6,
+        chess::board::Line::FileH => 7,
+        _ => unreachable!(),
+    }
+}
+
+fn rank_offset(app: &App) -> u16 {
+    match app.board_location.rank() {
+        chess::board::Line::Rank1 => 0,
+        chess::board::Line::Rank2 => 1,
+        chess::board::Line::Rank3 => 2,
+        chess::board::Line::Rank4 => 3,
+        chess::board::Line::Rank5 => 4,
+        chess::board::Line::Rank6 => 5,
+        chess::board::Line::Rank7 => 6,
+        chess::board::Line::Rank8 => 7,
+        _ => unreachable!(),
+    }
 }
 
 #[allow(dead_code)]
 mod basic {
     use chess::utils::print_all_errors;
-    use chess::*;
+    use chess::{board::*, turn::*, *};
     use std::fs;
 
     pub fn main_play_game() {
@@ -465,7 +474,7 @@ mod basic {
 
                 match buf.to_lowercase().trim() {
                     "u" => {
-                        if let Ok(_) = game.undo_move() {
+                        if game.undo_move().is_some() {
                             return Ok(GameState::Continue);
                         } else {
                             return Err("Undoing moves is not allowed".into());
@@ -496,7 +505,7 @@ mod basic {
                     _ => (),
                 }
 
-                let turn = parse_move(buf.trim())?;
+                let turn = buf.trim().parse::<Turn>()?;
                 game.make_move(&turn)?;
                 Ok(GameState::Continue)
             })();

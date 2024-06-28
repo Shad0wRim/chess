@@ -12,9 +12,8 @@ pub mod turn;
 /// Utility structs and functions for miscellaneous tasks
 pub mod utils;
 
-pub use board::{ChessBoard, DrawType, GameState, TurnError, Win, WinType};
-pub use parser::parse_move;
-pub use turn::Turn;
+use board::{ChessBoard, DrawType, GameState, TurnError, Win, WinType};
+use turn::Turn;
 
 use utils::Counter;
 
@@ -161,9 +160,9 @@ impl ChessGame {
     /// # Errors
     ///
     /// Returns an error if the allow_undo flag is false
-    pub fn undo_move(&mut self) -> Result<(), ()> {
+    pub fn undo_move(&mut self) -> Option<()> {
         if !self.allow_undo {
-            return Err(());
+            return None;
         }
         self.game_hist.pop();
         let history = self.game_hist.clone();
@@ -174,7 +173,7 @@ impl ChessGame {
         for turn in history {
             self.make_move(&turn).unwrap();
         }
-        Ok(())
+        Some(())
     }
     /// Displays the visual state of the board, depending on the perspective set in rotate_board
     pub fn display(&self) {
@@ -229,7 +228,7 @@ impl ChessGame {
     ///
     /// # Panics
     ///
-    /// Panics if the input move does not have a [Source::Square] as the source.
+    /// Panics if the input move does not have a [board::Source::Square] as the source.
     pub fn get_minimum_move(&self, turn: &Turn) -> Turn {
         self.board.get_minimum_move(turn)
     }

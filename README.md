@@ -4,11 +4,6 @@ This project is a terminal chess application written in Rust. It allows for play
 
 It also allows for playback of pgn files and creation of pgn files from the played games, as well as fen state format
 
-
-# Installation
-Currently unavailable, but once finished ->
-use cargo install *name* to download the client, which can play on its own and connect to the server if it is running
-
 # Usage
 Run the program using the command:
 ```

@@ -29,7 +29,7 @@ impl Player {
         reader.read_line(&mut buf)?;
         Ok(buf)
     }
-    fn send_line(&mut self, message: &str) -> io::Result<()> {
+    fn _send_line(&mut self, message: &str) -> io::Result<()> {
         let message = if !message.ends_with('\n') {
             message.to_owned() + "\n"
         } else {

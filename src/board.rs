@@ -522,7 +522,9 @@ impl ChessBoard {
                 generated_moves.retain(|sq| {
                     !self.causes_check(&Turn::new((*piece.0, *piece.1), *sq), self.is_white)
                 });
-                potential_moves.push((*piece.0, generated_moves));
+                if !generated_moves.is_empty() {
+                    potential_moves.push((*piece.0, generated_moves));
+                }
             }
         }
 
