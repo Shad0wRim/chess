@@ -8,7 +8,7 @@ pub use r#move::Move;
 
 use crate::{
     board::{Source, Square},
-    parser::{parse_move, ChessParseError, Flag},
+    parser::{parse_move, ChessParseError},
     pieces::{Piece, PieceType},
 };
 
@@ -63,9 +63,9 @@ impl Display for Turn {
                     CastlingType::Long => "0-0-0",
                     CastlingType::Short => "0-0",
                 };
-                let check_or_checkmate = if flags & Flag::CHECKMATE != 0 {
+                let check_or_checkmate = if flags & flags::CHECKMATE != 0 {
                     "#"
-                } else if flags & Flag::CHECK != 0 {
+                } else if flags & flags::CHECK != 0 {
                     "+"
                 } else {
                     ""
@@ -88,14 +88,14 @@ impl Display for Turn {
                     Some(src) => src.to_string(),
                     None => "".to_string(),
                 };
-                let capture = flags & Flag::CAPTURE != 0;
+                let capture = flags & flags::CAPTURE != 0;
                 let promotion = match promotion {
                     Some(pc) => "=".to_string() + &pc.to_string(),
                     None => "".to_string(),
                 };
-                let check_or_checkmate = if flags & Flag::CHECKMATE != 0 {
+                let check_or_checkmate = if flags & flags::CHECKMATE != 0 {
                     "#"
-                } else if flags & Flag::CHECK != 0 {
+                } else if flags & flags::CHECK != 0 {
                     "+"
                 } else {
                     ""
@@ -114,4 +114,16 @@ impl Display for Turn {
 
         write!(f, "{}", output)
     }
+}
+
+/// module that includes bitflag constants for a chess turn
+pub mod flags {
+    /// No special flags
+    pub const NONE: u8 = 0;
+    /// The move caused check
+    pub const CHECK: u8 = 1 << 0;
+    /// The move caused checkmate
+    pub const CHECKMATE: u8 = 1 << 1;
+    /// The move captured a piece
+    pub const CAPTURE: u8 = 1 << 2;
 }

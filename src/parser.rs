@@ -3,11 +3,14 @@ use std::fmt::Display;
 
 use crate::board::{Line, Source, Square};
 use crate::pieces::PieceType;
-use crate::turn::{CastlingType, Move, Turn};
+use crate::turn::{flags, CastlingType, Move, Turn};
 
 #[derive(Debug)]
+/// Error type for parsing into a [Turn]
 pub struct ChessParseError {
+    /// Character that the error occured at
     pub character: char,
+    /// Kind of error
     pub kind: ParseErrorKind,
 }
 impl Display for ChessParseError {
@@ -22,13 +25,21 @@ impl Error for ChessParseError {
 }
 
 #[derive(Debug)]
+/// Kind of parse error
 pub enum ParseErrorKind {
+    /// Invalid characters in the input string
     InvalidChars,
+    /// More than one uppercase piece character
     ExcessPieces,
+    /// More than 4 square characters
     ExcessSquares,
+    /// Not enough square characters
     NeedSquare,
+    /// Invalid promotion
     PromotionError(PromotionError),
+    /// Fail to convert a square or line
     ConversionError(ConversionError),
+    /// Failed to parse a FEN string
     InvalidFen,
 }
 
@@ -60,9 +71,13 @@ impl Display for ParseErrorKind {
 }
 
 #[derive(Debug)]
+/// Types of promotion errors
 pub enum PromotionError {
+    /// A pawn has reached the final rank and must promote, but wasn't specified
     Must,
+    /// A pawn was specified to promote, but hasn't reached the final rank
     Cant,
+    /// A pawn was specified to promote to an invalid piece
     Invalid(PieceType),
 }
 impl Error for PromotionError {}
@@ -77,8 +92,11 @@ impl Display for PromotionError {
 }
 
 #[derive(Debug)]
+/// Error returned when trying to convert a string into a type
 pub struct ConversionError {
+    /// Input string for conversion
     pub input: String,
+    /// Output target, represents the name of the type
     pub target: String,
 }
 impl Error for ConversionError {}
@@ -216,14 +234,14 @@ fn get_squares(turn: &str) -> Result<(Square, Option<Source>), ChessParseError> 
 }
 
 fn get_flags(turn: &str) -> u8 {
-    let mut flag = Flag::NONE;
+    let mut flag = flags::NONE;
     if turn.contains('x') {
-        flag |= Flag::CAPTURE;
+        flag |= flags::CAPTURE;
     }
     if turn.contains('#') {
-        flag |= Flag::CHECKMATE;
+        flag |= flags::CHECKMATE;
     } else if turn.contains('+') {
-        flag |= Flag::CHECK;
+        flag |= flags::CHECK;
     }
     flag
 }
@@ -238,14 +256,6 @@ fn parse_castling(turn: &str) -> Option<CastlingType> {
     }
 }
 
-#[allow(non_snake_case)]
-pub mod Flag {
-    pub const NONE: u8 = 0;
-    pub const CHECK: u8 = 1 << 0;
-    pub const CHECKMATE: u8 = 1 << 1;
-    pub const CAPTURE: u8 = 1 << 2;
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -255,7 +265,7 @@ mod tests {
         assert!(if let Ok(Turn::Move(Move {
             piece: PieceType::Pawn,
             dst: Square::E4,
-            flags: Flag::NONE,
+            flags: flags::NONE,
             src: None,
             promotion: None,
         })) = parse_move("e4")
@@ -268,14 +278,14 @@ mod tests {
     #[test]
     fn castling() {
         assert!(
-            if let Ok(Turn::Castling(CastlingType::Short, Flag::NONE)) = parse_move("O-O") {
+            if let Ok(Turn::Castling(CastlingType::Short, flags::NONE)) = parse_move("O-O") {
                 true
             } else {
                 false
             }
         );
         assert!(
-            if let Ok(Turn::Castling(CastlingType::Long, Flag::NONE)) = parse_move("O-O-O") {
+            if let Ok(Turn::Castling(CastlingType::Long, flags::NONE)) = parse_move("O-O-O") {
                 true
             } else {
                 false
@@ -287,7 +297,7 @@ mod tests {
         assert!(if let Ok(Turn::Move(Move {
             piece: PieceType::Queen,
             dst: Square::F3,
-            flags: Flag::NONE,
+            flags: flags::NONE,
             src: None,
             promotion: None,
         })) = parse_move("Qf3")
@@ -302,7 +312,7 @@ mod tests {
         assert!(if let Ok(Turn::Move(Move {
             piece: PieceType::Pawn,
             dst: Square::F5,
-            flags: Flag::CAPTURE,
+            flags: flags::CAPTURE,
             src: Some(Source::Line(Line::FileE)),
             promotion: None,
         })) = parse_move("exf5")
@@ -317,7 +327,7 @@ mod tests {
         assert!(if let Ok(Turn::Move(Move {
             piece: PieceType::Pawn,
             dst: Square::E8,
-            flags: Flag::NONE,
+            flags: flags::NONE,
             src: None,
             promotion: Some(PieceType::Queen),
         })) = parse_move("e8=Q")
@@ -347,7 +357,7 @@ mod tests {
     #[test]
     fn castling_check() {
         assert!(
-            if let Ok(Turn::Castling(CastlingType::Long, Flag::CHECK)) = parse_move("0-0-0+") {
+            if let Ok(Turn::Castling(CastlingType::Long, flags::CHECK)) = parse_move("0-0-0+") {
                 true
             } else {
                 false

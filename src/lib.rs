@@ -2,12 +2,13 @@
 //! Chess board representation
 //!
 //! Provides a board representation to create a chess game
-/// Types and functions that concern the board state
+/// Module that concerns the board state
 pub mod board;
-mod parser;
-/// Types and functions that concern the pieces
+/// Module that parses algebraic chess notation into a [Turn]
+pub mod parser;
+/// Module that concerns the pieces
 pub mod pieces;
-/// Types and functions that concern the turn/move descriptions
+/// Module that concerns the turn/move descriptions
 pub mod turn;
 /// Utility structs and functions for miscellaneous tasks
 pub mod utils;

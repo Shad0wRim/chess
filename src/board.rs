@@ -11,9 +11,8 @@ use std::error::Error;
 use std::fmt::{self, Display};
 use std::str::FromStr;
 
-use crate::parser::Flag;
 use crate::pieces::{Piece, PieceType};
-use crate::turn::{CastlingType, Move, Turn};
+use crate::turn::{flags, CastlingType, Move, Turn};
 use crate::utils::Counter;
 
 #[derive(Debug)]
@@ -374,7 +373,7 @@ impl ChessBoard {
             match (
                 self.get(&r#move.dst).is_some()
                     || self.en_passant.is_some_and(|sq| sq == r#move.dst),
-                is_flag_set(flags, Flag::CAPTURE),
+                is_flag_set(flags, flags::CAPTURE),
             ) {
                 (true, true) => (),
                 (true, false) => return Err(TurnError::NeedCaptureSpecifier),
@@ -384,7 +383,7 @@ impl ChessBoard {
         }
         match (
             self.causes_checkmate(turn),
-            is_flag_set(flags, Flag::CHECKMATE),
+            is_flag_set(flags, flags::CHECKMATE),
         ) {
             (true, true) => return Ok(()),
             (true, false) => return Err(TurnError::NeedCheckmateSpecifier),
@@ -393,7 +392,7 @@ impl ChessBoard {
         }
         match (
             self.causes_check(turn, !self.is_white),
-            is_flag_set(flags, Flag::CHECK),
+            is_flag_set(flags, flags::CHECK),
         ) {
             (true, true) => (),
             (true, false) => return Err(TurnError::NeedCheckSpecifier),
@@ -409,13 +408,13 @@ impl ChessBoard {
     pub fn gen_flags(&self, turn: Turn) -> Turn {
         let mut flags: u8 = 0;
         if self.causes_checkmate(&turn) {
-            flags |= Flag::CHECKMATE;
+            flags |= flags::CHECKMATE;
         } else if self.causes_check(&turn, !self.is_white) {
-            flags |= Flag::CHECK;
+            flags |= flags::CHECK;
         }
         if let Turn::Move(Move { dst, .. }) = turn {
             if self.get(&dst).is_some() || self.en_passant.is_some_and(|sq| sq == dst) {
-                flags |= Flag::CAPTURE;
+                flags |= flags::CAPTURE;
             }
         };
 
