@@ -8,7 +8,7 @@ use chess::{
     utils::all_errors_string,
     ChessGame,
 };
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton};
 use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style, Stylize},
@@ -46,6 +46,8 @@ struct App {
     selected_piece: Option<(Square, Piece)>,
     input_mode: InputMode,
     error_messages: Vec<String>,
+    last_input_was_keyboard: bool,
+    saved_location: Square,
     stop: bool,
 }
 
@@ -59,6 +61,8 @@ impl App {
             board_location: Square::A1,
             selected_piece: None,
             error_messages: Vec::new(),
+            last_input_was_keyboard: true,
+            saved_location: Square::A1,
             stop: false,
         }
     }
@@ -180,7 +184,7 @@ impl App {
     }
     fn handle_turn(&mut self, turn: Turn) {
         match self.game.make_move(&turn) {
-            Ok(_) => {}
+            Ok(_) => self.selected_piece = None,
             Err(err) => {
                 let split_errors = all_errors_string(&err)
                     .lines()
@@ -229,6 +233,31 @@ impl App {
         };
         self.handle_turn(turn);
     }
+    fn handle_mouse(&mut self, row: u16, col: u16) {
+        self.board_location = Square::iterator()
+            .map(|sq| (sq, square_to_location(sq)))
+            .fold(
+                (Square::A1, 1000_i16),
+                |(closest_sq, dist), (next_sq, (x, y))| {
+                    let next_dist = (x as i16 - col as i16).pow(2) + (y as i16 - row as i16).pow(2);
+                    if next_dist < dist {
+                        (next_sq, next_dist)
+                    } else {
+                        (closest_sq, dist)
+                    }
+                },
+            )
+            .0;
+    }
+    fn select_or_move(&mut self) {
+        let potential_piece = self.game.board().get(&self.board_location);
+        match potential_piece {
+            Some(Piece { is_white, .. }) if *is_white == self.game.is_white() => {
+                self.select_piece()
+            }
+            Some(_) | None => self.move_piece(),
+        }
+    }
 }
 
 fn install_hook() {
@@ -244,41 +273,62 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
     loop {
         terminal.draw(|f| ui(f, &app))?;
 
-        if let Event::Key(key) = event::read()? {
-            match app.input_mode {
-                InputMode::Visual => match key.code {
-                    KeyCode::Char('a') => {
-                        app.input_mode = InputMode::Algebraic;
-                    }
-                    KeyCode::Char('h') | KeyCode::Left => app.move_board_left(),
-                    KeyCode::Char('l') | KeyCode::Right => app.move_board_right(),
-                    KeyCode::Char('j') | KeyCode::Down => app.move_board_down(),
-                    KeyCode::Char('k') | KeyCode::Up => app.move_board_up(),
-                    KeyCode::Char(' ') => app.select_piece(),
-                    KeyCode::Enter => app.move_piece(),
-                    _ => {}
-                },
-                InputMode::Algebraic if key.kind == KeyEventKind::Press => match key.code {
-                    KeyCode::Enter => app.submit_message(),
-                    KeyCode::Char(to_insert) => {
-                        app.enter_char(to_insert);
-                    }
-                    KeyCode::Backspace => {
-                        app.delete_char();
-                    }
-                    KeyCode::Left => {
-                        app.move_cursor_left();
-                    }
-                    KeyCode::Right => {
-                        app.move_cursor_right();
-                    }
-                    KeyCode::Esc => {
-                        app.input_mode = InputMode::Visual;
-                    }
-                    _ => {}
-                },
-                InputMode::Algebraic => {}
+        match event::read()? {
+            Event::Key(key) => {
+                app.last_input_was_keyboard = true;
+                match app.input_mode {
+                    InputMode::Visual => match key.code {
+                        KeyCode::Char('a') => {
+                            app.input_mode = InputMode::Algebraic;
+                        }
+                        KeyCode::Char('h') | KeyCode::Left => app.move_board_left(),
+                        KeyCode::Char('l') | KeyCode::Right => app.move_board_right(),
+                        KeyCode::Char('j') | KeyCode::Down => app.move_board_down(),
+                        KeyCode::Char('k') | KeyCode::Up => app.move_board_up(),
+                        KeyCode::Char(' ') => app.select_piece(),
+                        KeyCode::Enter => app.move_piece(),
+                        _ => {}
+                    },
+                    InputMode::Algebraic if key.kind == KeyEventKind::Press => match key.code {
+                        KeyCode::Enter => app.submit_message(),
+                        KeyCode::Char(to_insert) => {
+                            app.enter_char(to_insert);
+                        }
+                        KeyCode::Backspace => {
+                            app.delete_char();
+                        }
+                        KeyCode::Left => {
+                            app.move_cursor_left();
+                        }
+                        KeyCode::Right => {
+                            app.move_cursor_right();
+                        }
+                        KeyCode::Esc => {
+                            app.input_mode = InputMode::Visual;
+                        }
+                        _ => {}
+                    },
+                    InputMode::Algebraic => {}
+                }
             }
+            Event::Mouse(mouse) => match mouse.kind {
+                event::MouseEventKind::Down(button) if button == MouseButton::Left => {
+                    app.last_input_was_keyboard = false;
+                    app.handle_mouse(mouse.row, mouse.column);
+                    app.saved_location = app.board_location;
+                    app.select_or_move();
+                }
+                event::MouseEventKind::Up(button)
+                    if button == MouseButton::Left && app.saved_location != app.board_location =>
+                {
+                    app.move_piece();
+                }
+                event::MouseEventKind::Drag(button) if button == MouseButton::Left => {
+                    app.handle_mouse(mouse.row, mouse.column)
+                }
+                _ => {}
+            },
+            _ => {}
         }
         if app.stop {
             terminal.draw(|f| ui(f, &app))?;
@@ -310,13 +360,24 @@ fn ui(f: &mut Frame, app: &App) {
             } else {
                 "  ".to_string()
             };
-            pc_string
-                .bg(if sq.is_light() {
+            if let Some((selected_square, _)) = app.selected_piece {
+                if selected_square == sq {
+                    pc_string.bg(Color::LightYellow)
+                } else {
+                    pc_string.bg(if sq.is_light() {
+                        Color::White
+                    } else {
+                        Color::LightGreen
+                    })
+                }
+            } else {
+                pc_string.bg(if sq.is_light() {
                     Color::White
                 } else {
                     Color::LightGreen
                 })
-                .black()
+            }
+            .black()
         })
         .collect::<Vec<_>>()
         .chunks(8)
@@ -354,9 +415,10 @@ fn ui(f: &mut Frame, app: &App) {
 
     match app.input_mode {
         InputMode::Visual => {
-            let y_offset = rank_offset(app);
-            let x_offset = file_offset(app);
-            f.set_cursor(board_area.x + 3 + x_offset * 2, board_area.y + 8 - y_offset);
+            if app.last_input_was_keyboard {
+                let (x, y) = square_to_location(app.board_location);
+                f.set_cursor(board_area.x + x, board_area.y + y);
+            }
         }
         InputMode::Algebraic => {
             f.set_cursor(
@@ -411,32 +473,38 @@ fn ui(f: &mut Frame, app: &App) {
     f.render_stateful_widget(game_history, move_area, &mut list_state);
 }
 
-fn file_offset(app: &App) -> u16 {
-    match app.board_location.file() {
-        chess::board::Line::FileA => 0,
-        chess::board::Line::FileB => 1,
-        chess::board::Line::FileC => 2,
-        chess::board::Line::FileD => 3,
-        chess::board::Line::FileE => 4,
-        chess::board::Line::FileF => 5,
-        chess::board::Line::FileG => 6,
-        chess::board::Line::FileH => 7,
-        _ => unreachable!(),
+fn square_to_location(sq: Square) -> (u16, u16) {
+    fn file_offset(sq: Square) -> u16 {
+        match sq.file() {
+            chess::board::Line::FileA => 0,
+            chess::board::Line::FileB => 1,
+            chess::board::Line::FileC => 2,
+            chess::board::Line::FileD => 3,
+            chess::board::Line::FileE => 4,
+            chess::board::Line::FileF => 5,
+            chess::board::Line::FileG => 6,
+            chess::board::Line::FileH => 7,
+            _ => unreachable!(),
+        }
     }
-}
+    fn rank_offset(sq: Square) -> u16 {
+        match sq.rank() {
+            chess::board::Line::Rank1 => 0,
+            chess::board::Line::Rank2 => 1,
+            chess::board::Line::Rank3 => 2,
+            chess::board::Line::Rank4 => 3,
+            chess::board::Line::Rank5 => 4,
+            chess::board::Line::Rank6 => 5,
+            chess::board::Line::Rank7 => 6,
+            chess::board::Line::Rank8 => 7,
+            _ => unreachable!(),
+        }
+    }
 
-fn rank_offset(app: &App) -> u16 {
-    match app.board_location.rank() {
-        chess::board::Line::Rank1 => 0,
-        chess::board::Line::Rank2 => 1,
-        chess::board::Line::Rank3 => 2,
-        chess::board::Line::Rank4 => 3,
-        chess::board::Line::Rank5 => 4,
-        chess::board::Line::Rank6 => 5,
-        chess::board::Line::Rank7 => 6,
-        chess::board::Line::Rank8 => 7,
-        _ => unreachable!(),
-    }
+    let x = 3 + file_offset(sq) * 2;
+    let y = 8 - rank_offset(sq);
+
+    (x, y)
 }
 
 #[allow(dead_code)]
