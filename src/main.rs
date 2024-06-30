@@ -13,7 +13,7 @@ use ratatui::{
     layout::{Constraint, Layout},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
-    widgets::{Block, List, ListItem, ListState, Paragraph},
+    widgets::{Block, Borders, List, ListItem, ListState, Paragraph, Wrap},
     Frame,
 };
 use std::io;
@@ -34,6 +34,7 @@ fn main() -> std::io::Result<()> {
     Ok(())
 }
 
+#[derive(PartialEq)]
 enum InputMode {
     Visual,
     Algebraic,
@@ -45,7 +46,7 @@ struct App {
     board_location: Square,
     selected_piece: Option<(Square, Piece)>,
     input_mode: InputMode,
-    error_messages: Vec<String>,
+    messages: Vec<String>,
     last_input_was_keyboard: bool,
     saved_location: Square,
     stop: bool,
@@ -60,7 +61,7 @@ impl App {
             character_index: 0,
             board_location: Square::A1,
             selected_piece: None,
-            error_messages: Vec::new(),
+            messages: Vec::new(),
             last_input_was_keyboard: true,
             saved_location: Square::A1,
             stop: false,
@@ -118,7 +119,7 @@ impl App {
         self.character_index = 0;
     }
     fn submit_message(&mut self) {
-        self.error_messages.clear();
+        self.messages.clear();
         self.handle_input();
         self.input.clear();
         self.reset_cursor();
@@ -137,8 +138,8 @@ impl App {
                         WinType::Resign => "resignation",
                         WinType::Timeout => "timout",
                     };
-                self.error_messages.clear();
-                self.error_messages.push(win_message);
+                self.messages.clear();
+                self.messages.push(win_message);
             }
             GameState::Draw(draw) => {
                 let draw_message = String::from("The game is a draw by ")
@@ -149,17 +150,15 @@ impl App {
                         DrawType::InsufficientMaterial => "insufficient material",
                         DrawType::Offer => "draw offer",
                     };
-                self.error_messages.clear();
-                self.error_messages.push(draw_message);
+                self.messages.clear();
+                self.messages.push(draw_message);
             }
             GameState::Stop => {
-                self.error_messages.clear();
-                self.error_messages
-                    .push(String::from("The game was aborted"));
+                self.messages.clear();
+                self.messages.push(String::from("The game was aborted"));
             }
         }
-        self.error_messages
-            .push(String::from("Press any key to quit"));
+        self.messages.push(String::from("Press any key to quit"));
         self.stop = true;
     }
     fn select_piece(&mut self) {
@@ -170,9 +169,9 @@ impl App {
         };
     }
     fn move_piece(&mut self) {
-        self.error_messages.clear();
+        self.messages.clear();
         let Some(selected_piece) = self.selected_piece else {
-            self.error_messages
+            self.messages
                 .push(String::from("There is no selected piece"));
             return;
         };
@@ -190,7 +189,7 @@ impl App {
                     .lines()
                     .map(|str| str.to_string())
                     .collect::<Vec<_>>();
-                self.error_messages.extend_from_slice(&split_errors);
+                self.messages.extend_from_slice(&split_errors);
             }
         }
         self.handle_gamestate();
@@ -200,7 +199,7 @@ impl App {
             "undo" => match self.game.undo_move() {
                 Some(_) => return,
                 None => {
-                    self.error_messages
+                    self.messages
                         .extend_from_slice(&["Undoing is not allowed".to_string()]);
                     return;
                 }
@@ -227,7 +226,7 @@ impl App {
                     .lines()
                     .map(|str| str.to_string())
                     .collect::<Vec<_>>();
-                self.error_messages.extend_from_slice(&split_errors);
+                self.messages.extend_from_slice(&split_errors);
                 return;
             }
         };
@@ -279,6 +278,7 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
                 match app.input_mode {
                     InputMode::Visual => match key.code {
                         KeyCode::Char('a') => {
+                            app.selected_piece = None;
                             app.input_mode = InputMode::Algebraic;
                         }
                         KeyCode::Char('h') | KeyCode::Left => app.move_board_left(),
@@ -311,7 +311,7 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
                     InputMode::Algebraic => {}
                 }
             }
-            Event::Mouse(mouse) => match mouse.kind {
+            Event::Mouse(mouse) if app.input_mode == InputMode::Visual => match mouse.kind {
                 event::MouseEventKind::Down(button) if button == MouseButton::Left => {
                     app.last_input_was_keyboard = false;
                     app.handle_mouse(mouse.row, mouse.column);
@@ -345,11 +345,126 @@ fn ui(f: &mut Frame, app: &App) {
         Constraint::Min(1),
     ]);
     let chunks = vertical.split(f.size());
-    let board_area = chunks[0];
+
+    let top_layout = Layout::horizontal([Constraint::Length(20), Constraint::Min(0)]);
+
+    let [board_area, info_area] = top_layout.areas(chunks[0]);
+
     let input_area = chunks[1];
+
     let bottom_layout = Layout::horizontal([Constraint::Min(0), Constraint::Length(20)]);
     let [error_area, move_area] = bottom_layout.areas(chunks[2]);
 
+    render_board(app, f, board_area);
+
+    render_info(app, f, info_area);
+
+    render_input(app, f, input_area);
+
+    render_messages(app, f, error_area);
+
+    render_history(app, f, move_area);
+}
+
+fn render_history(app: &App, f: &mut Frame, move_area: ratatui::prelude::Rect) {
+    let game_history: Vec<ListItem> = app
+        .game
+        .game_hist()
+        .chunks(2)
+        .scan(ChessGame::default(), |board, turns| {
+            let mut turn_string = String::new();
+
+            let turn1 = board.get_minimum_move(&turns[0]);
+            board.make_move(&turn1).expect("History is always valid");
+
+            turn_string += &turn1.to_string();
+
+            if let Some(turn2) = turns.get(1) {
+                let turn2 = board.get_minimum_move(turn2);
+                board.make_move(&turn2).expect("History is always valid");
+
+                turn_string.push(' ');
+                turn_string += &turn2.to_string();
+            }
+
+            Some(turn_string)
+        })
+        .enumerate()
+        .map(|(i, t)| {
+            let content = Line::from(Span::raw(format!("{}: {}\n", i + 1, t)));
+            ListItem::new(content)
+        })
+        .collect();
+    let game_history = List::new(game_history).block(
+        Block::default()
+            .borders(Borders::LEFT | Borders::RIGHT | Borders::BOTTOM)
+            .title_bottom("Game History"),
+    );
+    let mut list_state = ListState::default().with_selected(Some(usize::MAX));
+    f.render_stateful_widget(game_history, move_area, &mut list_state);
+}
+
+fn render_messages(app: &App, f: &mut Frame, error_area: ratatui::prelude::Rect) {
+    let messages: Vec<ListItem> = app
+        .messages
+        .iter()
+        .enumerate()
+        .map(|(i, m)| {
+            let content = Line::from(Span::raw(format!("{}: {m}", i + 1)));
+            ListItem::new(content)
+        })
+        .collect();
+    let messages = List::new(messages).block(
+        Block::default()
+            .borders(Borders::LEFT | Borders::BOTTOM)
+            .title_bottom("Messages"),
+    );
+    f.render_widget(messages, error_area);
+}
+
+fn render_info(app: &App, f: &mut Frame, info_area: ratatui::prelude::Rect) {
+    let info = match app.input_mode {
+        InputMode::Visual => Paragraph::new(vec![
+            "Press `a` to enter command mode".into(),
+            "Move cursor with hjkl or arrows".into(),
+            "Press `space` to select and `enter` to move".into(),
+            "Use the mouse to select and move pieces".into(),
+        ]),
+        InputMode::Algebraic => Paragraph::new(vec![
+            "Press `esc` to enter visual mode".into(),
+            "`quit` `resign` `draw` to end the game".into(),
+            "Enter a move in algebraic chess notation to make a move with commands".into(),
+        ]),
+    }
+    .block(
+        Block::default()
+            .borders(Borders::TOP | Borders::RIGHT)
+            .title("Info"),
+    )
+    .wrap(Wrap { trim: true });
+
+    f.render_widget(info, info_area);
+}
+
+fn render_input(app: &App, f: &mut Frame, input_area: ratatui::prelude::Rect) {
+    let input = Paragraph::new(app.input.as_str())
+        .style(match app.input_mode {
+            InputMode::Visual => Style::default(),
+            InputMode::Algebraic => Style::default().fg(ratatui::style::Color::Yellow),
+        })
+        .block(Block::bordered().title("Input"));
+
+    if let InputMode::Algebraic = app.input_mode {
+        f.set_cursor(
+            input_area.x + app.character_index as u16 + 1,
+            input_area.y + 1,
+        );
+    }
+
+    f.render_widget(input, input_area);
+}
+
+fn render_board(app: &App, f: &mut Frame, board_area: ratatui::prelude::Rect) {
     let player_string = app.game.player_string();
 
     let mut all_square_strs = Square::iterator()
@@ -403,74 +518,15 @@ fn ui(f: &mut Frame, app: &App) {
         InputMode::Visual => ratatui::style::Color::LightCyan,
         InputMode::Algebraic => ratatui::style::Color::default(),
     }));
-    f.render_widget(board, board_area);
 
-    let input = Paragraph::new(app.input.as_str())
-        .style(match app.input_mode {
-            InputMode::Visual => Style::default(),
-            InputMode::Algebraic => Style::default().fg(ratatui::style::Color::Yellow),
-        })
-        .block(Block::bordered().title("Input"));
-    f.render_widget(input, input_area);
-
-    match app.input_mode {
-        InputMode::Visual => {
-            if app.last_input_was_keyboard {
-                let (x, y) = square_to_location(app.board_location);
-                f.set_cursor(board_area.x + x, board_area.y + y);
-            }
-        }
-        InputMode::Algebraic => {
-            f.set_cursor(
-                input_area.x + app.character_index as u16 + 1,
-                input_area.y + 1,
-            );
+    if let InputMode::Visual = app.input_mode {
+        if app.last_input_was_keyboard {
+            let (x, y) = square_to_location(app.board_location);
+            f.set_cursor(board_area.x + x, board_area.y + y);
         }
     }
 
-    let error_messages: Vec<ListItem> = app
-        .error_messages
-        .iter()
-        .enumerate()
-        .map(|(i, m)| {
-            let content = Line::from(Span::raw(format!("{}: {m}", i + 1)));
-            ListItem::new(content)
-        })
-        .collect();
-    let error_messages = List::new(error_messages).block(Block::bordered().title("Error Messages"));
-    f.render_widget(error_messages, error_area);
-
-    let game_history: Vec<ListItem> = app
-        .game
-        .game_hist()
-        .chunks(2)
-        .scan(ChessGame::default(), |board, turns| {
-            let mut turn_string = String::new();
-
-            let turn1 = board.get_minimum_move(&turns[0]);
-            board.make_move(&turn1).expect("History is always valid");
-
-            turn_string += &turn1.to_string();
-
-            if let Some(turn2) = turns.get(1) {
-                let turn2 = board.get_minimum_move(turn2);
-                board.make_move(&turn2).expect("History is always valid");
-
-                turn_string.push(' ');
-                turn_string += &turn2.to_string();
-            }
-
-            Some(turn_string)
-        })
-        .enumerate()
-        .map(|(i, t)| {
-            let content = Line::from(Span::raw(format!("{}: {}\n", i + 1, t)));
-            ListItem::new(content)
-        })
-        .collect();
-    let game_history = List::new(game_history).block(Block::bordered().title("Game History"));
-    let mut list_state = ListState::default().with_selected(Some(usize::MAX));
-    f.render_stateful_widget(game_history, move_area, &mut list_state);
+    f.render_widget(board, board_area);
 }
 
 fn square_to_location(sq: Square) -> (u16, u16) {
