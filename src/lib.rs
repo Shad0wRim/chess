@@ -6,6 +6,8 @@
 pub mod board;
 /// Module that parses algebraic chess notation into a [Turn]
 pub mod parser;
+/// Module for dealing with pgn files
+pub mod pgn;
 /// Module that concerns the pieces
 pub mod pieces;
 /// Module that concerns the turn/move descriptions
@@ -196,7 +198,7 @@ impl ChessGame {
         };
         println!("{curr_player}'s turn");
     }
-    /// Returns the string that representst the visual state of the board, depending on the
+    /// Returns the string that represents the visual state of the board, depending on the
     /// perspective set in rotate_board
     pub fn board_string(&self) -> String {
         match self.rotate_board {

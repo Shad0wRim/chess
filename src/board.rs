@@ -372,7 +372,8 @@ impl ChessBoard {
         if let Turn::Move(r#move) = turn {
             match (
                 self.get(&r#move.dst).is_some()
-                    || self.en_passant.is_some_and(|sq| sq == r#move.dst),
+                    || self.en_passant.is_some_and(|sq| sq == r#move.dst)
+                        && r#move.piece == PieceType::Pawn,
                 is_flag_set(flags, flags::CAPTURE),
             ) {
                 (true, true) => (),
@@ -427,26 +428,7 @@ impl ChessBoard {
     pub fn gen_fen(&self) -> String {
         let mut fen = String::new();
 
-        for rank in ('1'..='8').rev().map(|c| Line::new(c).unwrap()) {
-            // let mut line = String::new();
-            // for loc in rank.to_vec() {
-            //     let piece_char = if let Some(pc) = self.get(&loc) {
-            //         format!("{:#}", pc)
-            //     } else {
-            //         String::from("1")
-            //     };
-            //     line.push_str(&piece_char);
-            // }
-            // let line = line.chars().fold(String::new(), |mut full_line, c| {
-            //     match (c.is_numeric(), unsafe {
-            //         full_line.as_bytes_mut().last_mut()
-            //     }) {
-            //         (true, Some(last_char)) if (*last_char as char).is_numeric() => *last_char += 1,
-            //         _ => full_line.push(c),
-            //     }
-            //     full_line
-            // });
-            //
+        for rank in ('1'..='8').rev().filter_map(Line::new) {
             let mut line: Vec<u8> = Vec::new();
             for loc in rank.to_vec() {
                 let piece_char = if let Some(pc) = self.get(&loc) {
@@ -933,10 +915,7 @@ impl Display for ChessBoard {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let mut output = String::new();
         if f.alternate() {
-            for (i, rank) in ('1'..='8')
-                .map(|c| Line::new(c).expect("hard coded value is safe"))
-                .enumerate()
-            {
+            for (i, rank) in ('1'..='8').filter_map(Line::new).enumerate() {
                 output.push_str(&(i + 1).to_string());
                 output.push(' ');
                 let line: String = rank
@@ -948,11 +927,7 @@ impl Display for ChessBoard {
             }
             output.push_str("  h g f e d c b a \n");
         } else {
-            for (i, rank) in ('1'..='8')
-                .map(|c| Line::new(c).expect("hard coded value is safe"))
-                .rev()
-                .enumerate()
-            {
+            for (i, rank) in ('1'..='8').filter_map(Line::new).rev().enumerate() {
                 output.push_str(&(8 - i).to_string());
                 output.push(' ');
                 let line: String = rank

@@ -14,25 +14,25 @@ pub enum Line {
 
 impl Line {
     /// Creates a new rank or file from the corresponding character in chess notation
-    pub fn new(rank_or_file: char) -> Result<Line, &'static str> {
+    pub fn new(rank_or_file: char) -> Option<Line> {
         match rank_or_file {
-            '1' => Ok(Self::Rank1),
-            '2' => Ok(Self::Rank2),
-            '3' => Ok(Self::Rank3),
-            '4' => Ok(Self::Rank4),
-            '5' => Ok(Self::Rank5),
-            '6' => Ok(Self::Rank6),
-            '7' => Ok(Self::Rank7),
-            '8' => Ok(Self::Rank8),
-            'a' => Ok(Self::FileA),
-            'b' => Ok(Self::FileB),
-            'c' => Ok(Self::FileC),
-            'd' => Ok(Self::FileD),
-            'e' => Ok(Self::FileE),
-            'f' => Ok(Self::FileF),
-            'g' => Ok(Self::FileG),
-            'h' => Ok(Self::FileH),
-            _ => Err("cannot create line from that character"),
+            '1' => Some(Self::Rank1),
+            '2' => Some(Self::Rank2),
+            '3' => Some(Self::Rank3),
+            '4' => Some(Self::Rank4),
+            '5' => Some(Self::Rank5),
+            '6' => Some(Self::Rank6),
+            '7' => Some(Self::Rank7),
+            '8' => Some(Self::Rank8),
+            'a' => Some(Self::FileA),
+            'b' => Some(Self::FileB),
+            'c' => Some(Self::FileC),
+            'd' => Some(Self::FileD),
+            'e' => Some(Self::FileE),
+            'f' => Some(Self::FileF),
+            'g' => Some(Self::FileG),
+            'h' => Some(Self::FileH),
+            _ => None,
         }
     }
     /// Creates a vector of all of the squares in the line, from increasing alphabetical or
@@ -282,7 +282,7 @@ impl FromStr for Line {
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         if s.len() == 1 {
-            Self::new(s.chars().next().unwrap())
+            Self::new(s.chars().next().unwrap()).ok_or("Not a valid line character")
         } else {
             Err("input too long")
         }

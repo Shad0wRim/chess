@@ -20,6 +20,10 @@ use std::io;
 use tui::Tui;
 
 fn main() -> std::io::Result<()> {
+    tui()
+}
+
+fn tui() -> std::io::Result<()> {
     install_hook();
     let mut terminal = tui::init()?;
 
@@ -312,18 +316,18 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
                 }
             }
             Event::Mouse(mouse) if app.input_mode == InputMode::Visual => match mouse.kind {
-                event::MouseEventKind::Down(button) if button == MouseButton::Left => {
+                event::MouseEventKind::Down(MouseButton::Left) => {
                     app.last_input_was_keyboard = false;
                     app.handle_mouse(mouse.row, mouse.column);
                     app.saved_location = app.board_location;
                     app.select_or_move();
                 }
-                event::MouseEventKind::Up(button)
-                    if button == MouseButton::Left && app.saved_location != app.board_location =>
+                event::MouseEventKind::Up(MouseButton::Left)
+                    if app.saved_location != app.board_location =>
                 {
                     app.move_piece();
                 }
-                event::MouseEventKind::Drag(button) if button == MouseButton::Left => {
+                event::MouseEventKind::Drag(MouseButton::Left) => {
                     app.handle_mouse(mouse.row, mouse.column)
                 }
                 _ => {}
@@ -501,7 +505,7 @@ fn render_board(app: &App, f: &mut Frame, board_area: ratatui::prelude::Rect) {
             Some(Line::from_iter(
                 [Span::from(rank.to_string() + " ")]
                     .into_iter()
-                    .chain(chunk.to_vec().into_iter())
+                    .chain(chunk.to_vec())
                     .chain([Span::raw("\n")]),
             ))
         })
@@ -671,87 +675,33 @@ mod basic {
             }
         }
     }
-    /// plays a game of chess from a pgn string, progressing when \[Enter\] is pressed
-    pub fn play_from_pgn(game: &mut ChessGame, file_string: String) {
+    /// plays a game of chess from a pgn string, progressing when <Enter> is pressed
+    pub fn play_from_pgn(game: &mut ChessGame, pgn_string: String) {
         let mut buf = String::new();
-        let scan_between = |open_delimiter: char, close_delimiter: char, keep: bool| {
-            move |is_between: &mut bool, ch: char| {
-                if open_delimiter == close_delimiter && ch == open_delimiter {
-                    *is_between = !*is_between;
-                    Some('�')
-                } else if ch == open_delimiter {
-                    *is_between = true;
-                    Some('�')
-                } else if ch == close_delimiter {
-                    *is_between = false;
-                    Some('�')
-                } else if *is_between {
-                    if keep {
-                        Some(ch)
-                    } else {
-                        Some('�')
-                    }
-                } else if keep {
-                    Some('�')
-                } else {
-                    Some(ch)
-                }
-            }
-        };
-        let extract_field = |field: &str| {
-            Some(
-                file_string
-                    .split_terminator('\n')
-                    .find(|line| line.contains(field))?
-                    .chars()
-                    .scan(false, scan_between('"', '"', true))
-                    .filter(|&ch| ch != '�')
-                    .collect::<String>(),
-            )
-        };
-        if let Some(white_name) = extract_field("White") {
-            game.players.0 = white_name;
-        }
-        if let Some(black_name) = extract_field("Black") {
-            game.players.1 = black_name;
-        }
 
-        let moves: Vec<_> = file_string
-            .split_terminator('\n')
-            .skip_while(|line| line.starts_with('[') || line.is_empty())
-            .collect::<Vec<_>>()
-            .join(" ")
-            .chars()
-            .scan(false, scan_between('{', '}', false))
-            .filter(|&ch| ch != '�')
-            .collect::<String>()
-            .split_whitespace()
-            .map(|substr| {
-                substr
-                    .split('.')
-                    .last()
-                    .expect("split always produces an iterator")
-            })
-            .filter_map(|turn| turn.parse::<Turn>().ok())
-            .collect();
+        let (game_info, moves) = pgn::read_pgn(&pgn_string);
+        let game_result = match game_info.get("Result") {
+            Some(result) => result.to_string(),
+            None => match pgn::get_game_result(&pgn_string) {
+                Some(result) => result.to_string(),
+                None => String::new(),
+            },
+        };
+        if let Some(white) = game_info.get("White") {
+            game.players.0 = white.clone();
+        }
+        if let Some(black) = game_info.get("Black") {
+            game.players.1 = black.clone();
+        }
 
         game.display();
 
-        let pgn_read_result = (|| -> Result<GameState, Box<dyn std::error::Error>> {
+        let move_read_result = (|| -> Result<GameState, Box<dyn std::error::Error>> {
             for r#move in moves {
                 std::io::stdin().read_line(&mut buf)?;
                 game.make_move(&r#move)?;
                 game.display();
             }
-
-            let game_result = match extract_field("Result") {
-                Some(result) => result,
-                None => file_string
-                    .split_whitespace()
-                    .last()
-                    .ok_or("Empty file")?
-                    .to_string(),
-            };
 
             match game_result.as_str() {
                 "1/2-1/2" => Ok(GameState::Draw(DrawType::Offer)),
@@ -768,7 +718,7 @@ mod basic {
             }
         })();
 
-        match pgn_read_result {
+        match move_read_result {
             Ok(game_result) => match game.game_state {
                 GameState::Continue => match game_result {
                     GameState::Continue => play_game(game),
