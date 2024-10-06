@@ -28,7 +28,7 @@ fn split_pgn_list(pgn_list_string: &str) -> Vec<String> {
         .split("\n\n")
         .collect::<Vec<_>>()
         .chunks(2)
-        .map(|items| items[0].to_owned() + "\n" + items[1])
+        .map(|items| items.join("\n"))
         .collect()
 }
 

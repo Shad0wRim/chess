@@ -20,7 +20,9 @@ use std::io;
 use tui::Tui;
 
 fn main() -> std::io::Result<()> {
-    tui()
+    //tui()
+    basic::main_play_game();
+    Ok(())
 }
 
 fn tui() -> std::io::Result<()> {
@@ -133,9 +135,15 @@ impl App {
             GameState::Continue => return,
             GameState::Win(win) => {
                 let win_message = String::from(if !win.is_white {
-                    &self.game.players.0
+                    self.game
+                        .game_info
+                        .get("White")
+                        .map_or("White", |x| x.as_ref())
                 } else {
-                    &self.game.players.1
+                    self.game
+                        .game_info
+                        .get("Black")
+                        .map_or("Black", |x| x.as_ref())
                 }) + " wins by "
                     + match win.kind {
                         WinType::Checkmate => "checkmate",
@@ -571,7 +579,10 @@ fn square_to_location(sq: Square) -> (u16, u16) {
 mod basic {
     use chess::utils::print_all_errors;
     use chess::{board::*, turn::*, *};
-    use std::fs;
+    use itertools::Itertools;
+    use pgn::read_pgn;
+    use std::io::BufRead;
+    use std::{fs, io};
 
     pub fn main_play_game() {
         // let mut buf = String::new();
@@ -584,20 +595,35 @@ mod basic {
         //     _ => RotateBoard::White,
         // };
 
-        let mut game = ChessGame::builder()
-            .rotate_board(RotateBoard::White)
-            .allow_undo(true)
-            // .rotate_board(rotate_option)
-            .players(("White".to_owned(), "Black".to_owned()))
-            .enforce_flags(true)
-            .build();
-        let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
+        //let mut game = ChessGame::builder()
+        //    .rotate_board(RotateBoard::White)
+        //    .allow_undo(true)
+        //    // .rotate_board(rotate_option)
+        //    .players(("White".to_owned(), "Black".to_owned()))
+        //    .enforce_flags(true)
+        //    .build();
+        //let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
+        let pgn_iter = io::BufReader::new(
+            fs::File::open("/mnt/c/Users/jungo/Downloads/sicilian.pgn").expect("Valid file"),
+        )
+        .lines()
+        .map_while(Result::ok)
+        .chunk_by(|line| line.starts_with('['));
+        let pgn_iter = pgn_iter
+            .into_iter()
+            .map(|(_, mut lines)| lines.join("\n"))
+            .chunks(2);
+        let pgn_iter = pgn_iter.into_iter().map(|mut lines| lines.join("\n"));
 
-        // play_from_pgn(&mut game, _pgn_string);
-        // game.reset();
-        play_game(&mut game);
+        for pgn_string in pgn_iter {
+            play_from_pgn(&mut ChessGame::default(), pgn_string);
+        }
 
-        println!("{}\n{}", game.gen_pgn(), game.gen_fen());
+        //play_from_pgn(&mut game, _pgn_string);
+        //game.reset();
+        //play_game(&mut game);
+
+        //println!("{}\n{}", game.gen_pgn(), game.gen_fen());
     }
     /// plays a full game of chess on a local machine, swapping between players
     pub fn play_game(game: &mut ChessGame) {
@@ -677,8 +703,6 @@ mod basic {
     }
     /// plays a game of chess from a pgn string, progressing when <Enter> is pressed
     pub fn play_from_pgn(game: &mut ChessGame, pgn_string: String) {
-        let mut buf = String::new();
-
         let (game_info, moves) = pgn::read_pgn(&pgn_string);
         let game_result = match game_info.get("Result") {
             Some(result) => result.to_string(),
@@ -688,17 +712,17 @@ mod basic {
             },
         };
         if let Some(white) = game_info.get("White") {
-            game.players.0 = white.clone();
+            game.game_info.insert(String::from("White"), white.clone());
         }
         if let Some(black) = game_info.get("Black") {
-            game.players.1 = black.clone();
+            game.game_info.insert(String::from("Black"), black.clone());
         }
 
         game.display();
 
         let move_read_result = (|| -> Result<GameState, Box<dyn std::error::Error>> {
             for r#move in moves {
-                std::io::stdin().read_line(&mut buf)?;
+                //std::io::stdin().read_line(&mut String::new())?;
                 game.make_move(&r#move)?;
                 game.display();
             }
