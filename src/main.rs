@@ -580,7 +580,7 @@ mod basic {
     use chess::utils::print_all_errors;
     use chess::{board::*, turn::*, *};
     use itertools::Itertools;
-    use pgn::read_pgn;
+    //use pgn::read_pgn;
     use std::io::BufRead;
     use std::{fs, io};
 
@@ -603,12 +603,10 @@ mod basic {
         //    .enforce_flags(true)
         //    .build();
         //let _pgn_string = fs::read_to_string("res/pgn.pgn").expect("Valid file");
-        let pgn_iter = io::BufReader::new(
-            fs::File::open("/mnt/c/Users/jungo/Downloads/sicilian.pgn").expect("Valid file"),
-        )
-        .lines()
-        .map_while(Result::ok)
-        .chunk_by(|line| line.starts_with('['));
+        let pgn_iter = io::BufReader::new(fs::File::open("res/sicilian.pgn").expect("Valid file"))
+            .lines()
+            .map_while(Result::ok)
+            .chunk_by(|line| line.starts_with('['));
         let pgn_iter = pgn_iter
             .into_iter()
             .map(|(_, mut lines)| lines.join("\n"))
