@@ -20,9 +20,9 @@ use std::io;
 use tui::Tui;
 
 fn main() -> std::io::Result<()> {
-    //tui()
-    basic::main_play_game();
-    Ok(())
+    tui()
+    // basic::main_play_game();
+    // Ok(())
 }
 
 fn tui() -> std::io::Result<()> {
@@ -303,21 +303,11 @@ fn run_app(terminal: &mut Tui, mut app: App) -> io::Result<()> {
                     },
                     InputMode::Algebraic if key.kind == KeyEventKind::Press => match key.code {
                         KeyCode::Enter => app.submit_message(),
-                        KeyCode::Char(to_insert) => {
-                            app.enter_char(to_insert);
-                        }
-                        KeyCode::Backspace => {
-                            app.delete_char();
-                        }
-                        KeyCode::Left => {
-                            app.move_cursor_left();
-                        }
-                        KeyCode::Right => {
-                            app.move_cursor_right();
-                        }
-                        KeyCode::Esc => {
-                            app.input_mode = InputMode::Visual;
-                        }
+                        KeyCode::Char(to_insert) => app.enter_char(to_insert),
+                        KeyCode::Backspace => app.delete_char(),
+                        KeyCode::Left => app.move_cursor_left(),
+                        KeyCode::Right => app.move_cursor_right(),
+                        KeyCode::Esc => app.input_mode = InputMode::Visual,
                         _ => {}
                     },
                     InputMode::Algebraic => {}
