@@ -1,6 +1,6 @@
 use std::io::{self, stdout, Stdout};
 
-use crossterm::{
+use ratatui::crossterm::{
     event::{DisableMouseCapture, EnableMouseCapture},
     execute,
     terminal::*,

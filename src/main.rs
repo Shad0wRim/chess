@@ -8,8 +8,8 @@ use chess::{
     utils::all_errors_string,
     ChessGame,
 };
-use crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton};
 use ratatui::{
+    crossterm::event::{self, Event, KeyCode, KeyEventKind, MouseButton},
     layout::{Constraint, Layout},
     style::{Color, Style, Stylize},
     text::{Line, Span, Text},
@@ -346,7 +346,7 @@ fn ui(f: &mut Frame, app: &App) {
         Constraint::Length(3),
         Constraint::Min(1),
     ]);
-    let chunks = vertical.split(f.size());
+    let chunks = vertical.split(f.area());
 
     let top_layout = Layout::horizontal([Constraint::Length(20), Constraint::Min(0)]);
 
@@ -457,10 +457,10 @@ fn render_input(app: &App, f: &mut Frame, input_area: ratatui::prelude::Rect) {
         .block(Block::bordered().title("Input"));
 
     if let InputMode::Algebraic = app.input_mode {
-        f.set_cursor(
+        f.set_cursor_position((
             input_area.x + app.character_index as u16 + 1,
             input_area.y + 1,
-        );
+        ));
     }
 
     f.render_widget(input, input_area);
@@ -524,7 +524,7 @@ fn render_board(app: &App, f: &mut Frame, board_area: ratatui::prelude::Rect) {
     if let InputMode::Visual = app.input_mode {
         if app.last_input_was_keyboard {
             let (x, y) = square_to_location(app.board_location);
-            f.set_cursor(board_area.x + x, board_area.y + y);
+            f.set_cursor_position((board_area.x + x, board_area.y + y));
         }
     }
 
