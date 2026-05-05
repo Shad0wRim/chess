@@ -64,7 +64,7 @@ fn parse_pgn_info(info_string: &str) -> HashMap<String, String> {
             (field_name, field_value)
         })
         .for_each(|(name, value)| {
-            if name != "" {
+            if !name.is_empty() {
                 info.insert(name, value);
             }
         });
@@ -84,7 +84,7 @@ fn parse_pgn_moves(moves_string: &str) -> Vec<Turn> {
         .map(|substr| {
             substr
                 .split('.')
-                .last()
+                .next_back()
                 .expect("split always produces an iterator")
         })
         .filter_map(|turn| turn.parse::<Turn>().ok())
